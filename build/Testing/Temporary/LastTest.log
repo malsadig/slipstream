@@ -1,0 +1,18 @@
+Start testing: Nov 24 15:32 EST
+----------------------------------------------------------
+1/1 Testing: codec_tests
+1/1 Test: codec_tests
+Command: "/home/mossab/Documents/Programming/Slipstream/build/codec_tests"
+Directory: /home/mossab/Documents/Programming/Slipstream/build
+"codec_tests" start time: Nov 24 15:32 EST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"codec_tests" end time: Nov 24 15:32 EST
+"codec_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 24 15:32 EST
