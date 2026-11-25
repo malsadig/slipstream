@@ -24,6 +24,7 @@ namespace {
         assertIncompletePrefixes(fixtures::quoteBytes);
         assertIncompletePrefixes(fixtures::tradeBytes);
         assertIncompletePrefixes(fixtures::sessionControlBytes);
+        assertIncompletePrefixes(fixtures::newOrderBytes);
     }
 
     void testMalformedHeaders() {

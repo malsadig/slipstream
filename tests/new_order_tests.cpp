@@ -7,6 +7,7 @@
 #include <array>
 #include <variant>
 #include <algorithm>
+#include <limits>
 
 namespace {
     const NewOrder expected {
@@ -64,10 +65,98 @@ namespace {
         assert(newOrder != nullptr);
         assert(*newOrder == expected);
     }
+
+    void testNewOrderDecodingFailures() {
+        auto invalidVersion = fixtures::newOrderBytes;
+        invalidVersion[3] = std::byte{0xFF};
+        assertDecodeError(
+            std::span<const std::byte>{invalidVersion}.first<kHeaderSize>(),
+            CodecError::UNSUPPORTED_VERSION
+        );
+
+        auto invalidBodyLength = fixtures::newOrderBytes;
+        invalidBodyLength[0] = std::byte{0x31};
+        assertDecodeError(
+            std::span<const std::byte>{invalidBodyLength}.first<kHeaderSize>(),
+            CodecError::INVALID_BODY_LENGTH
+        );
+
+        invalidBodyLength[0] = std::byte{0x33};
+        assertDecodeError(
+            std::span<const std::byte>{invalidBodyLength}.first<kHeaderSize>(),
+            CodecError::INVALID_BODY_LENGTH
+        );
+
+        auto invalidStatus = fixtures::newOrderBytes;
+        invalidStatus[24] = std::byte{0x58};
+        assertDecodeError(
+            std::span<const std::byte>{invalidStatus},
+            CodecError::INVALID_FIELD
+        );
+
+        auto invalidSide = fixtures::newOrderBytes;
+        invalidSide[41] = std::byte{0x3F};
+        assertDecodeError(
+            std::span<const std::byte>{invalidSide},
+            CodecError::INVALID_FIELD
+        );
+    }
+
+    void testNewOrderRoundTrips() {
+        NewOrder acceptedSell = expected;
+        assertRoundTrip<kNewOrderWireSize>(acceptedSell);
+
+        NewOrder acceptedBuy = expected;
+        acceptedBuy.side = OrderSide::BUY;
+        assertRoundTrip<kNewOrderWireSize>(acceptedBuy);
+
+        NewOrder rejectedSell = expected;
+        rejectedSell.status = OrderStatus::REJECTED;
+        assertRoundTrip<kNewOrderWireSize>(rejectedSell);
+
+        NewOrder rejectedBuy = rejectedSell;
+        rejectedBuy.side = OrderSide::BUY;
+        assertRoundTrip<kNewOrderWireSize>(rejectedBuy);
+
+        NewOrder fullSymbol = expected;
+        std::copy_n("ABCDEFGHIJKL", kSymbolSize, fullSymbol.symbol);
+        assertRoundTrip<kNewOrderWireSize>(fullSymbol);
+
+        NewOrder negativeInts = expected;
+        negativeInts.trade_id = -42;
+        negativeInts.limit_px = -263000;
+        assertRoundTrip<kNewOrderWireSize>(negativeInts);
+
+        NewOrder zerod = expected;
+        zerod.client_order_id = 0;
+        zerod.trade_id = 0;
+        zerod.ts_ns = 0;
+        zerod.qty = 0;
+        zerod.limit_px = 0;
+        assertRoundTrip<kNewOrderWireSize>(zerod);
+
+        NewOrder minimumSigned = expected;
+        minimumSigned.trade_id = std::numeric_limits<std::int64_t>::min();
+        minimumSigned.limit_px = std::numeric_limits<std::int64_t>::min();
+        assertRoundTrip<kNewOrderWireSize>(minimumSigned);
+
+        NewOrder maximumSigned = expected;
+        maximumSigned.trade_id = std::numeric_limits<std::int64_t>::max();
+        maximumSigned.limit_px = std::numeric_limits<std::int64_t>::max();
+        assertRoundTrip<kNewOrderWireSize>(maximumSigned);
+
+        NewOrder maximumUnsigned = expected;
+        maximumUnsigned.client_order_id = std::numeric_limits<std::uint64_t>::max();
+        maximumUnsigned.ts_ns = std::numeric_limits<std::uint64_t>::max();
+        maximumUnsigned.qty = std::numeric_limits<std::uint32_t>::max();
+        assertRoundTrip<kNewOrderWireSize>(maximumUnsigned);
+    }
 } // namespace
 
 void runNewOrderTests() {
     testValidNewOrderEncoding();
     testNewOrderEncodingFailures();
     testValidNewOrderDecoding();
+    testNewOrderDecodingFailures();
+    testNewOrderRoundTrips();
 }

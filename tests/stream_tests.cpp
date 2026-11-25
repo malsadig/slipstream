@@ -14,7 +14,7 @@ namespace {
         Message expected;
     };
 
-    const std::array<StreamFixture, 4> streamFixtures {
+    const std::array<StreamFixture, 5> streamFixtures {
         StreamFixture {
             fixtures::heartbeatBytes,
             Heartbeat {
@@ -48,6 +48,19 @@ namespace {
             SessionControl {
                 .ts_ns = fixtures::timestamp,
                 .state = SessionState::HALT,
+            }
+        },
+        StreamFixture {
+            fixtures::newOrderBytes,
+            NewOrder {
+                .client_order_id = 0x1112131415161718ULL,
+                .symbol = "somesymbol",
+                .status = OrderStatus::ACCEPTED,
+                .ts_ns = fixtures::timestamp,
+                .trade_id = 42,
+                .side = OrderSide::SELL,
+                .qty = 100,
+                .limit_px = 100000,
             }
         },
     };
@@ -115,19 +128,20 @@ namespace {
 
     void testCompleteFrameAndPartialTail() {
         const auto& first = streamFixtures[0];
-        const auto& next = streamFixtures[1];
 
-        for (auto split{1uz}; split < next.bytes.size(); ++split) {
-            std::vector<std::byte> bytes(first.bytes.begin(), first.bytes.end());
-            const auto prefix = next.bytes.first(split);
-            bytes.insert(bytes.end(), prefix.begin(), prefix.end());
+        for (const auto& next : streamFixtures) {
+            for (auto split{1uz}; split < next.bytes.size(); ++split) {
+                std::vector<std::byte> bytes(first.bytes.begin(), first.bytes.end());
+                const auto prefix = next.bytes.first(split);
+                bytes.insert(bytes.end(), prefix.begin(), prefix.end());
 
-            StreamDecoder decoder;
-            assertMessages(decoder.feed(bytes), {first.expected});
-            assertMessages(decoder.feed({}), {});
-            assertMessages(decoder.feed(next.bytes.subspan(split)), {next.expected});
-            assertMessages(decoder.feed({}), {});
-            assert(decoder.finish() == CodecError::NONE);
+                StreamDecoder decoder;
+                assertMessages(decoder.feed(bytes), {first.expected});
+                assertMessages(decoder.feed({}), {});
+                assertMessages(decoder.feed(next.bytes.subspan(split)), {next.expected});
+                assertMessages(decoder.feed({}), {});
+                assert(decoder.finish() == CodecError::NONE);
+            }
         }
     }
 
@@ -159,6 +173,14 @@ namespace {
         auto invalidState = fixtures::sessionControlBytes;
         invalidState[12] = std::byte{0xFF};
         assertStreamError(invalidState, CodecError::INVALID_FIELD);
+
+        auto invalidStatus = fixtures::newOrderBytes;
+        invalidStatus[24] = std::byte{0x58};
+        assertStreamError(invalidStatus, CodecError::INVALID_FIELD);
+
+        auto invalidSide = fixtures::newOrderBytes;
+        invalidSide[41] = std::byte{0x3F};
+        assertStreamError(invalidSide, CodecError::INVALID_FIELD);
     }
 
     void testValidFrameBeforeError() {
@@ -194,14 +216,16 @@ namespace {
         }
 
         const auto& first = streamFixtures[0];
-        const auto& next = streamFixtures[1];
-        std::vector<std::byte> bytes(first.bytes.begin(), first.bytes.end());
-        const auto prefix = next.bytes.first(5);
-        bytes.insert(bytes.end(), prefix.begin(), prefix.end());
+        
+        for (const auto& next : streamFixtures) {
+            std::vector<std::byte> bytes(first.bytes.begin(), first.bytes.end());
+            const auto prefix = next.bytes.first(5);
+            bytes.insert(bytes.end(), prefix.begin(), prefix.end());
 
-        StreamDecoder decoder;
-        assertMessages(decoder.feed(bytes), {first.expected});
-        assert(decoder.finish() == CodecError::TRUNCATED_INPUT);
+            StreamDecoder decoder;
+            assertMessages(decoder.feed(bytes), {first.expected});
+            assert(decoder.finish() == CodecError::TRUNCATED_INPUT);
+        }
     }
 
 } // namespace
