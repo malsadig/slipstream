@@ -109,6 +109,45 @@ DecodeResult decodeOne(std::span<const std::byte> input) {
         };
     }
 
+    case MessageType::NEW_ORDER: {
+        NewOrder message{};
+        message.client_order_id = reader.u64();
+        reader.symbol(message.symbol);
+        message.status = static_cast<OrderStatus>(reader.character());
+        message.ts_ns = reader.u64();
+        message.trade_id = reader.i64();
+        message.side = static_cast<OrderSide>(reader.character());
+        message.qty = reader.u32();
+        message.limit_px = reader.i64();
+
+        if (message.status != OrderStatus::ACCEPTED &&
+            message.status != OrderStatus::REJECTED) {
+            return {
+                DecodeStatus::ERROR,
+                CodecError::INVALID_FIELD,
+                0,
+                std::nullopt
+            };
+        }
+
+        if (message.side != OrderSide::BUY &&
+            message.side != OrderSide::SELL) {
+            return {
+                DecodeStatus::ERROR,
+                CodecError::INVALID_FIELD,
+                0,
+                std::nullopt
+            };
+        }
+
+        return {
+            DecodeStatus::COMPLETE,
+            CodecError::NONE,
+            frameSize,
+            Message{message}
+        };
+    }
+
     case MessageType::SESSION_CONTROL: {
         SessionControl message{};
         message.ts_ns = reader.u64();

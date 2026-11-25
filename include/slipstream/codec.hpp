@@ -7,8 +7,6 @@
 #include <optional>
 #include <span>
 
-
-
 enum class CodecError {
     NONE,
     BUFFER_TOO_SMALL,
@@ -24,7 +22,7 @@ struct EncodeResult {
     std::size_t bytes_written{};
 };
 
-using Message = std::variant<Heartbeat, Quote, Trade, SessionControl>;
+using Message = std::variant<Heartbeat, Quote, Trade, SessionControl, NewOrder>;
 
 enum class DecodeStatus {
     COMPLETE,
@@ -47,6 +45,8 @@ struct DecodeResult {
 [[nodiscard]] EncodeResult encode(const Trade& message, std::span<std::byte> output);
 
 [[nodiscard]] EncodeResult encode(const SessionControl& message, std::span<std::byte> output);
+
+[[nodiscard]] EncodeResult encode(const NewOrder& message, std::span<std::byte> output);
 
 // Attempts to decode the first frame in input.
 [[nodiscard]] DecodeResult decodeOne(std::span<const std::byte> input);

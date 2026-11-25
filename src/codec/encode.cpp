@@ -79,3 +79,33 @@ EncodeResult encode(const SessionControl& message, std::span<std::byte> output) 
 
     return {CodecError::NONE, writer.bytesWritten()};
 }
+
+EncodeResult encode(const NewOrder& message, std::span<std::byte> output) {
+    if (output.size() < kNewOrderWireSize) {
+        return {CodecError::BUFFER_TOO_SMALL, 0};
+    }
+
+    if (message.status != OrderStatus::ACCEPTED &&
+        message.status != OrderStatus::REJECTED) {
+        return {CodecError::INVALID_FIELD, 0};
+    }
+
+    if (message.side != OrderSide::BUY &&
+        message.side != OrderSide::SELL) {
+        return {CodecError::INVALID_FIELD, 0};
+    }
+
+    slipstream::detail::ByteWriter writer{output, MessageType::NEW_ORDER};
+
+    writer.header();
+    writer.u64(message.client_order_id);
+    writer.symbol(message.symbol);
+    writer.character(std::to_underlying(message.status));
+    writer.u64(message.ts_ns);
+    writer.i64(message.trade_id);
+    writer.character(std::to_underlying(message.side));
+    writer.u32(message.qty);
+    writer.i64(message.limit_px);
+
+    return {CodecError::NONE, writer.bytesWritten()};
+}

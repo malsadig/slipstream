@@ -7,4 +7,5 @@ int main() {
     runSessionControlTests();
     runValidationTests();
     runStreamTests();
+    runNewOrderTests();
 }

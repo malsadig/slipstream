@@ -24,6 +24,7 @@ add_executable(codec_tests
     tests/session_control_tests.cpp
     tests/validation_tests.cpp
     tests/stream_tests.cpp
+    tests/new_order_tests.cpp
 )
 target_link_libraries(codec_tests PRIVATE slipstream_codec)
 

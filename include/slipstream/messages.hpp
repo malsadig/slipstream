@@ -27,7 +27,8 @@ enum class MessageType : std::uint8_t {
     QUOTE = 1,
     TRADE = 2,
     HEARTBEAT = 3,
-    SESSION_CONTROL = 4
+    SESSION_CONTROL = 4,
+    NEW_ORDER = 10,
 };
 
 struct Header {
@@ -77,6 +78,29 @@ struct SessionControl {
     bool operator==(const SessionControl&) const = default;
 };
 
+enum class OrderStatus : char {
+    ACCEPTED = 'A',
+    REJECTED = 'R'
+};
+
+enum class OrderSide : char {
+    BUY = 'B',
+    SELL = 'S'
+};
+
+struct NewOrder {
+    uint64_t client_order_id{};
+    char symbol[12]{};
+    OrderStatus status{OrderStatus::REJECTED};
+    uint64_t ts_ns{};
+    int64_t trade_id{};
+    OrderSide side{OrderSide::BUY};
+    uint32_t qty{};
+    int64_t limit_px{};
+
+    bool operator==(const NewOrder&) const = default;
+};
+
 #pragma pack(pop)
 
 static_assert(sizeof(Heartbeat) == 8);
@@ -84,6 +108,7 @@ static_assert(sizeof(Header) == 4);
 static_assert(sizeof(Quote) == 44);
 static_assert(sizeof(Trade) == 41);
 static_assert(sizeof(SessionControl) == 9);
+static_assert(sizeof(NewOrder) == 50);
 
 inline constexpr std::uint8_t kSymbolSize{12};
 inline constexpr std::uint8_t kHeaderSize{sizeof(Header)}; // 4
@@ -92,11 +117,13 @@ inline constexpr std::uint8_t kQuoteSize{sizeof(Quote)}; // 44
 inline constexpr std::uint8_t kHeartbeatSize{sizeof(Heartbeat)}; // 8
 inline constexpr std::uint8_t kTradeSize{sizeof(Trade)}; // 41
 inline constexpr std::uint8_t kSessionControlSize{sizeof(SessionControl)}; // 9
+inline constexpr std::uint8_t kNewOrderSize{sizeof(NewOrder)}; // 50
 
 inline constexpr std::uint8_t kHeartbeatWireSize{kHeaderSize + kHeartbeatSize}; // 12
 inline constexpr std::uint8_t kQuoteWireSize{kHeaderSize + kQuoteSize}; // 48
 inline constexpr std::uint8_t kTradeWireSize{kHeaderSize + kTradeSize}; // 45
 inline constexpr std::uint8_t kSessionControlWireSize{kHeaderSize + kSessionControlSize}; // 13
+inline constexpr std::uint8_t kNewOrderWireSize{kHeaderSize + kNewOrderSize}; // 54
 
 // each new message type will require a constexpr entry above, and a switch case here
 constexpr std::optional<std::size_t> bodySize(MessageType messageType) noexcept {
@@ -112,6 +139,9 @@ constexpr std::optional<std::size_t> bodySize(MessageType messageType) noexcept 
 
         case MessageType::SESSION_CONTROL:
             return kSessionControlSize;
+        
+        case MessageType::NEW_ORDER:
+            return kNewOrderSize;
 
         case MessageType::INVALID:
             return std::nullopt;
@@ -130,3 +160,4 @@ constexpr std::optional<std::size_t> wireSize(MessageType messageType) noexcept 
 
 static_assert(wireSize(MessageType::QUOTE).value() == 48);
 static_assert(!wireSize(MessageType::INVALID));
+static_assert(wireSize(MessageType::NEW_ORDER).value() == 54);
