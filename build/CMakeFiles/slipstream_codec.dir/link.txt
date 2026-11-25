@@ -1,2 +1,0 @@
-/usr/bin/ar qc libslipstream_codec.a CMakeFiles/slipstream_codec.dir/src/codec.cpp.o
-/usr/bin/ranlib libslipstream_codec.a

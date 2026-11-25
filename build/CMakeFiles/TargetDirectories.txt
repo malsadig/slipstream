@@ -1,5 +1,0 @@
-/home/mossab/Documents/Programming/Slipstream/build/CMakeFiles/slipstream_codec.dir
-/home/mossab/Documents/Programming/Slipstream/build/CMakeFiles/codec_tests.dir
-/home/mossab/Documents/Programming/Slipstream/build/CMakeFiles/test.dir
-/home/mossab/Documents/Programming/Slipstream/build/CMakeFiles/edit_cache.dir
-/home/mossab/Documents/Programming/Slipstream/build/CMakeFiles/rebuild_cache.dir
