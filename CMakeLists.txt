@@ -17,16 +17,31 @@ add_library(slipstream_codec STATIC
 target_include_directories(slipstream_codec PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 add_executable(codec_tests
-    tests/test_main.cpp
-    tests/heartbeat_tests.cpp
-    tests/quote_tests.cpp
-    tests/trade_tests.cpp
-    tests/session_control_tests.cpp
-    tests/validation_tests.cpp
-    tests/stream_tests.cpp
-    tests/new_order_tests.cpp
+    tests/codec/test_main.cpp
+    tests/codec/heartbeat_tests.cpp
+    tests/codec/quote_tests.cpp
+    tests/codec/trade_tests.cpp
+    tests/codec/session_control_tests.cpp
+    tests/codec/validation_tests.cpp
+    tests/codec/stream_tests.cpp
+    tests/codec/new_order_tests.cpp
 )
 target_link_libraries(codec_tests PRIVATE slipstream_codec)
 
+add_library(slipstream_replay STATIC
+    src/replay/csv.cpp
+)
+
+target_include_directories(slipstream_replay PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+add_executable(csv_tests
+    tests/replay/csv_tests.cpp
+)
+
+target_link_libraries(csv_tests PRIVATE slipstream_replay)
+
 enable_testing()
 add_test(NAME codec_tests COMMAND codec_tests)
+add_test(NAME csv_tests COMMAND csv_tests)

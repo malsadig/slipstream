@@ -33,7 +33,7 @@ The public headers are in `include/slipstream/`, where `messages.hpp` defines th
 
 Under `src/codec/`, `encode.cpp` and `decode.cpp` handle individual frames. The byte helpers are private to this directory (`byte_reader.hpp` and `byte_writer.hpp`), and `stream_decoder.cpp` buffers incoming data until it can extract complete frames.
 
-The tests are in `tests/`, with fixed byte fixtures and shared assertions under `support/`. `test_main.cpp` calls the suites declared in `test_suites.hpp`, and the test cases live in `*_tests.cpp`.
+The tests are in `tests/`, with fixed byte fixtures and shared assertions under `codec/support/`. `test_main.cpp` calls the suites declared in `test_suites.hpp`, and the test cases live in `*_tests.cpp`.
 
 ## A bit about the GCMD/1 and GCOE/1 wire formats
 
