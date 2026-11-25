@@ -18,6 +18,8 @@ inline constexpr std::uint8_t kProtocolVersion{1};
 
 struct Heartbeat {
     uint64_t ts_ns{};
+
+    bool operator==(const Heartbeat&) const = default;
 };
 
 enum class MessageType : std::uint8_t {
@@ -41,6 +43,8 @@ struct Quote {
     int64_t bid_px{}; // Fixed point ×10,000
     uint32_t ask_qty{};
     int64_t ask_px{}; // Fixed point ×10,000
+
+    bool operator==(const Quote&) const = default;
 };
 
 enum class Aggressor : char {
@@ -56,6 +60,8 @@ struct Trade {
     int64_t px{};
     Aggressor aggressor{Aggressor::UNKNOWN}; // 'B', 'S', or '?' if unknown
     int64_t id{}; // Trade identifier
+
+    bool operator==(const Trade&) const = default;
 };
 
 enum class SessionState : std::uint8_t {
@@ -67,6 +73,8 @@ enum class SessionState : std::uint8_t {
 struct SessionControl {
     uint64_t ts_ns{};
     SessionState state{SessionState::OPEN};
+
+    bool operator==(const SessionControl&) const = default;
 };
 
 #pragma pack(pop)

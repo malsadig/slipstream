@@ -240,6 +240,12 @@ EncodeResult encode(const Trade& message, std::span<std::byte> output) {
         return {CodecError::BUFFER_TOO_SMALL, 0};
     }
 
+    if (message.aggressor != Aggressor::BUY &&
+        message.aggressor != Aggressor::SELL &&
+        message.aggressor != Aggressor::UNKNOWN) {
+        return {CodecError::INVALID_FIELD, 0};
+    }
+
     ByteWriter writer{output, MessageType::TRADE};
 
     writer.header();
@@ -256,6 +262,12 @@ EncodeResult encode(const Trade& message, std::span<std::byte> output) {
 EncodeResult encode(const SessionControl& message, std::span<std::byte> output) {
     if (output.size() < kSessionControlWireSize) {
         return {CodecError::BUFFER_TOO_SMALL, 0};
+    }
+
+    if (message.state != SessionState::OPEN &&
+        message.state != SessionState::HALT &&
+        message.state != SessionState::CLOSE) {
+        return {CodecError::INVALID_FIELD, 0};
     }
 
     ByteWriter writer{output, MessageType::SESSION_CONTROL};
