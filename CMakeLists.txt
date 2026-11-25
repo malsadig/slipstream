@@ -8,7 +8,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
 
-add_library(slipstream_codec STATIC src/codec.cpp)
+add_library(slipstream_codec STATIC
+    src/codec/encode.cpp
+    src/codec/decode.cpp
+)
+
 target_include_directories(slipstream_codec PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 add_executable(codec_tests
