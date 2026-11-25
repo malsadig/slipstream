@@ -16,6 +16,7 @@ enum class CodecError {
     UNSUPPORTED_VERSION,
     UNKNOWN_MESSAGE_TYPE,
     INVALID_BODY_LENGTH,
+    TRUNCATED_INPUT,
 };
 
 struct EncodeResult {

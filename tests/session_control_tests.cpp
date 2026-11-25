@@ -8,57 +8,59 @@
 #include <variant>
 #include <algorithm>
 
-void testValidSessionControlEncoding() {
-    const SessionControl sessionControl {
-        .ts_ns = fixtures::timestamp,
-        .state = SessionState::HALT
-    };
+namespace {
+    void testValidSessionControlEncoding() {
+        const SessionControl sessionControl {
+            .ts_ns = fixtures::timestamp,
+            .state = SessionState::HALT
+        };
 
-    std::array<std::byte, kSessionControlWireSize> output{};
+        std::array<std::byte, kSessionControlWireSize> output{};
 
-    EncodeResult result = encode(sessionControl, output);
+        EncodeResult result = encode(sessionControl, output);
 
-    assert(result.error == CodecError::NONE);
-    assert(result.bytes_written == fixtures::sessionControlBytes.size());
+        assert(result.error == CodecError::NONE);
+        assert(result.bytes_written == fixtures::sessionControlBytes.size());
 
-    assert(output == fixtures::sessionControlBytes);
-}
+        assert(output == fixtures::sessionControlBytes);
+    }
 
-void testValidSessionControlDecoding() {
-    DecodeResult result = decodeOne(fixtures::sessionControlBytes);
-    assert(result.status == DecodeStatus::COMPLETE);
-    assert(result.error == CodecError::NONE);
-    assert(result.bytes_consumed == kSessionControlWireSize);
-    
-    assert(result.message.has_value());
+    void testValidSessionControlDecoding() {
+        DecodeResult result = decodeOne(fixtures::sessionControlBytes);
+        assert(result.status == DecodeStatus::COMPLETE);
+        assert(result.error == CodecError::NONE);
+        assert(result.bytes_consumed == kSessionControlWireSize);
+        
+        assert(result.message.has_value());
 
-    const Message& message = *result.message;
+        const Message& message = *result.message;
 
-    const SessionControl* sessionControl = std::get_if<SessionControl>(&message);
+        const SessionControl* sessionControl = std::get_if<SessionControl>(&message);
 
-    assert(sessionControl != nullptr);
-    assert(sessionControl->ts_ns == fixtures::timestamp);
-    assert(sessionControl->state == SessionState::HALT);
-}
+        assert(sessionControl != nullptr);
+        assert(sessionControl->ts_ns == fixtures::timestamp);
+        assert(sessionControl->state == SessionState::HALT);
+    }
 
-void testSessionControlRoundTrips() {
-    const SessionControl basic {
-        .ts_ns = fixtures::timestamp,
-        .state = SessionState::HALT
-    };
+    void testSessionControlRoundTrips() {
+        const SessionControl basic {
+            .ts_ns = fixtures::timestamp,
+            .state = SessionState::HALT
+        };
 
-    assertRoundTrip<kSessionControlWireSize>(basic);
-    
-    SessionControl close = basic;
-    close.state = SessionState::CLOSE;
+        assertRoundTrip<kSessionControlWireSize>(basic);
+        
+        SessionControl close = basic;
+        close.state = SessionState::CLOSE;
 
-    assertRoundTrip<kSessionControlWireSize>(close);
+        assertRoundTrip<kSessionControlWireSize>(close);
 
-    SessionControl open = basic;
-    open.state = SessionState::OPEN;
+        SessionControl open = basic;
+        open.state = SessionState::OPEN;
 
-    assertRoundTrip<kSessionControlWireSize>(open);
-}
+        assertRoundTrip<kSessionControlWireSize>(open);
+    }
+} // namespace
 
 void runSessionControlTests() {
     testValidSessionControlEncoding();

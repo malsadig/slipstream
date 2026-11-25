@@ -6,4 +6,5 @@ int main() {
     runTradeTests();
     runSessionControlTests();
     runValidationTests();
+    runStreamTests();
 }

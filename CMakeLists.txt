@@ -11,6 +11,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 add_library(slipstream_codec STATIC
     src/codec/encode.cpp
     src/codec/decode.cpp
+    src/codec/stream_decoder.cpp
 )
 
 target_include_directories(slipstream_codec PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -22,6 +23,7 @@ add_executable(codec_tests
     tests/trade_tests.cpp
     tests/session_control_tests.cpp
     tests/validation_tests.cpp
+    tests/stream_tests.cpp
 )
 target_link_libraries(codec_tests PRIVATE slipstream_codec)
 
