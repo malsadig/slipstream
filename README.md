@@ -1,8 +1,8 @@
 # Slipstream
 
-The goal of this project is to build a C++23 execution engine that evaluates historical trades for a single ticker using a rolling VWAP calculated from market quotes. Two clients will replay quotes and trades over TCP at first, with the server checking quotes against VWAP (+- some tolerance) and trades against those quotes while enforcing limits on trade size and participation rate. After a brief warm-up, each trade gets an accepted or rejected `NewOrder` response. At the end of a run, I create an execution report showing how the accepted trades compared with VWAP, along with measurements of the time from receiving a trade to sending its `NewOrder` response (tick to trade).
+The goal of this project is to build a C++23 execution engine that evaluates historical trades for a single ticker using a rolling VWAP calculated from market quotes. Two clients will replay quotes and trades over TCP at first, with the server checking quotes against VWAP (+- some tolerance) and trades against those quotes while enforcing limits on trade size and participation rate. After a brief warm-up, each trade gets an accepted or rejected `NewOrder` response. At the end of a run, I create an execution report showing how the accepted trades compared with VWAP, along with measurements of the time from receiving a trade to sending its `NewOrder` response (tick to order).
 
-I'm building Slipstream in C++23 to encode and decode binary market data, including data that arrives in chunks. It currently handles the four GCMD/1 messages: `Quote`, `Trade`, `Heartbeat`, and `SessionControl`. I still need to write the GCOE/1 NewOrder encoder and the CSV replay clients for M1.
+I'm building Slipstream in C++23 to encode and decode binary market data and order messages, including data that arrives in chunks. The codec currently supports the four GCMD/1 messages (`Quote`, `Trade`, `Heartbeat`, and `SessionControl`) plus GCOE/1 `NewOrder`. I still need to finish the CSV replay clients for M1.
 
 ## Milestones
 
@@ -35,9 +35,9 @@ Under `src/codec/`, `encode.cpp` and `decode.cpp` handle individual frames. The 
 
 The tests are in `tests/`, with fixed byte fixtures and shared assertions under `support/`. `test_main.cpp` calls the suites declared in `test_suites.hpp`, and the test cases live in `*_tests.cpp`.
 
-## A bit about the GCMD/1 wire format
+## A bit about the GCMD/1 and GCOE/1 wire formats
 
-The codec supports version `1` and reads/writes each field individually. Integers are little-endian, with fields packed together without padding.
+The codec supports version `1` for both protocols and reads/writes each field individually. Integers are little-endian, with fields packed together without padding.
 
 Prices use signed 64-bit integers multiplied by 10,000, e.g. `100000` represents `10.0000`. For timestamps, `ts_ns` holds an unsigned 64-bit count of nanoseconds since the Unix epoch.
 
@@ -51,20 +51,23 @@ The body fields below are in wire order. `u32` means an unsigned 32-bit integer 
 - `Trade` (type `2`, 41-byte body, 45-byte frame): `symbol[12]`, `ts_ns: u64`, `qty: u32`, `px: i64`, `aggressor: char`, `id: i64`.
 - `Heartbeat` (type `3`, 8-byte body, 12-byte frame): `ts_ns: u64`.
 - `SessionControl` (type `4`, 9-byte body, 13-byte frame): `ts_ns: u64`, `state: u8`.
+- `NewOrder` (GCOE/1 type `10`, 50-byte body, 54-byte frame): `client_order_id: u64`, `symbol[12]`, `status: char`, `ts_ns: u64`, `trade_id: i64`, `side: char`, `qty: u32`, `limit_px: i64`.
 
 For a Trade, `aggressor` must be `B` for buy, `S` for sell, or `?` for unknown. SessionControl uses `0` for open, `1` for halt, and `2` for close in order to control the connected data streams.
+
+NewOrder's `status` must be `A` for accepted or `R` for rejected, and its `side` must be `B` for buy or `S` for sell.
 
 ## Encode a message
 
 `encode(message, output)` writes a complete frame, including the header. On success, you get `CodecError::NONE` and the number of bytes written.
 
-If the output buffer is too small, the result is `BUFFER_TOO_SMALL`, including when the message also has an invalid aggressor or session state. With enough space in the buffer, `encode()` returns `INVALID_FIELD` for an invalid aggressor or session state. Both errors leave the output unchanged and report zero bytes written.
+If the output buffer is too small, the result is `BUFFER_TOO_SMALL`, including when the message also has an invalid field. With enough space in the buffer, `encode()` returns `INVALID_FIELD` for an invalid Trade aggressor or SessionControl state, or when a NewOrder's status is outside `A`/`R` or its side is outside `B`/`S`. Both errors leave the output unchanged and report zero bytes written.
 
 ## Decode a frame
 
 `decodeOne(input)` examines the first frame and, once it's complete and valid, returns `COMPLETE` with an owning `Message`. The `bytes_consumed` value is that frame's size, so any bytes after it remain for the caller to handle.
 
-You get `NEED_MORE` when decoding needs more bytes. If the header or message has an unsupported or invalid value, the result is `ERROR`, with checks for the protocol version and message type as well as the exact body length, Trade aggressor, and SessionControl state. For either `NEED_MORE` or `ERROR`, the result has no message and `bytes_consumed` is zero.
+You get `NEED_MORE` when decoding needs more bytes. If the header or message has an unsupported or invalid value, the result is `ERROR`, with checks for the protocol version and message type as well as the exact body length. The decoder also validates Trade aggressors and SessionControl states, along with NewOrder status (`A`/`R`) and side (`B`/`S`). For either `NEED_MORE` or `ERROR`, the result has no message and `bytes_consumed` is zero.
 
 ## Feed it chunks
 
@@ -72,19 +75,19 @@ You get `NEED_MORE` when decoding needs more bytes. If the header or message has
 
 Waiting for the rest of a frame returns `CodecError::NONE`. When a later frame in a chunk is malformed, the result includes the valid messages that came before it along with the error.
 
-Once the decoder hits an error, every later `feed()` returns that error with an empty message list. Parsing stops at the malformed frame for the rest of that decoder's lifetime, so create a new decoder for a new stream.
+Once the decoder hits an error, every later `feed()` returns that error with an empty message list. Parsing stays stopped for the rest of that decoder's lifetime, so create a new decoder for a new stream.
 
 An empty `feed({})` supplies zero bytes. Call `finish()` when you know input has ended, since an empty feed doesn't signal that.
 
-`finish()` preserves any error the decoder has already recorded. If there's no earlier error, it returns `CodecError::NONE` for an empty buffer or `CodecError::TRUNCATED_INPUT` for an incomplete frame. The check applies to whatever is buffered at that moment, without setting a separate closed state.
+`finish()` returns any recorded error, or `CodecError::NONE` if the buffer is empty and error-free. An incomplete frame latches `CodecError::TRUNCATED_INPUT`, so later `feed()` calls keep returning that error with no messages even if the missing bytes arrive. A clean `finish()` leaves the decoder able to accept more input because there is no separate closed state.
 
 ## Tests
 
-The tests compare encoded bytes against fixtures whose expected bytes are pre-defined. They also decode those fixtures and compare every field when all four message types are round-tripped. The cases cover negative prices and null-padded symbols, along with full-length symbols and valid enum values.
+The tests compare encoded bytes against fixtures whose expected bytes are pre-defined. They also decode those fixtures and compare every field when all five message types are round-tripped. The cases cover negative prices and null-padded symbols, along with full-length symbols and valid enum values. NewOrder also has test cases for its status/side combinations and values at the integer boundaries.
 
 Invalid versions and message types get tested alongside incorrect body lengths and enum values. I also check incomplete headers and bodies, plus undersized output buffers and whether output stays unchanged when encoding fails.
 
-For `StreamDecoder`, each fixture gets split at every possible two-chunk boundary. Other cases feed one byte at a time or put several frames into the same chunk, including chunks that end with an incomplete frame. The tests check the order of the messages and make sure each one appears exactly once, after the whole frame has arrived.
+For `StreamDecoder`, the fixtures for all five message types, including NewOrder, get split at every possible two-chunk boundary. Other cases feed one byte at a time or put several frames into the same chunk, including chunks that end with an incomplete frame. The tests check the order of the messages and make sure each one appears exactly once, after the whole frame has arrived.
 
 I check that the same error comes back on later calls, including when the failing call also returns earlier valid messages. The `finish()` cases cover an empty buffer and input that ends partway through a header or body.
 
