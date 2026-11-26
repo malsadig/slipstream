@@ -2,11 +2,11 @@
 
 The goal of this project is to build a C++23 execution engine that evaluates historical trades for a single ticker using a rolling VWAP calculated from market quotes. Two clients will replay quotes and trades over TCP at first, with the server checking quotes against VWAP (+- some tolerance) and trades against those quotes while enforcing limits on trade size and participation rate. After a brief warm-up, each trade gets an accepted or rejected `NewOrder` response. At the end of a run, I create an execution report showing how the accepted trades compared with VWAP, along with measurements of the time from receiving a trade to sending its `NewOrder` response (tick to order).
 
-I'm building Slipstream in C++23 to encode and decode binary market data and order messages, including data that arrives in chunks. The codec currently supports the four GCMD/1 messages (`Quote`, `Trade`, `Heartbeat`, and `SessionControl`) plus GCOE/1 `NewOrder`. I still need to finish the CSV replay clients for M1.
+I'm building Slipstream in C++23 to encode and decode binary market data and order messages, including data that arrives in chunks. The codec currently supports the four GCMD/1 messages (`Quote`, `Trade`, `Heartbeat`, and `SessionControl`) plus GCOE/1 `NewOrder`. I've implemented both CSV replay clients for M1.
 
 ## Milestones
 
-- M1 covers the GCMD/1 and GCOE/1 codecs and the two CSV replay clients, with tests for frames arriving in chunks. The clients will preserve the timing between rows in the CSV.
+- M1 covers the GCMD/1 and GCOE/1 codecs and the two CSV replay clients, with tests for frames arriving in chunks. The clients preserve the timing between rows in the CSV.
 - M2 adds the TCP server so both clients can feed it data. For the selected symbol, it will keep track of the best bid and ask and calculate VWAP from quotes over a rolling window.
 - M3 decides whether each trade meets the price rules and the size and participation limits once warm-up is complete. The server sends accepted or rejected `NewOrder` messages and handles session control and heartbeats, then prints an execution report when the run ends.
 - M4 measures the time from receiving a trade to sending a `NewOrder`, including p50, p99, and p99.9. There's also an optional gRPC or UDP multicast version that reuses the same decision code.
@@ -27,15 +27,18 @@ ctest --test-dir build --output-on-failure
 
 CTest runs `codec_tests` and `csv_tests`.
 
-## Run both clients
+## Run the clients
 
-After building, run both clients concurrently with the supplied `QandT.csv` and real-time pacing:
+After building, run each client with the supplied `QandT.csv` and real-time pacing:
 
 ```bash
-./build/md_client QandT.csv build/quotes.bin && ./build/oe_client QandT.csv build/trades.bin /dev/null
+./build/md_client QandT.csv build/quotes.bin
+./build/oe_client QandT.csv build/trades.bin /dev/null
 ```
 
-This runs the M1 file-based paths; TCP transport is not implemented yet. This will output the trades and quotes in time-spaced order as the timestamps/elapsed time suggests.
+Add `--no-wait` to either command to skip the delays. The full file produces 6,905 Quotes and 3,095 Trades. `/dev/null` supplies no responses; replace it with a binary NewOrder file to read responses. The clients write binary frames to files and print each source row as it is emitted. TCP transport is not implemented yet.
+
+The reader accepts plain, unquoted CSV and converts prices to integers scaled by 10,000. Message timestamps use each client's replay startup time since the Unix epoch plus the offset from the first data row in the full file. Trade IDs are one-based positions among all data rows, including quotes.
 
 ## Where things are
 
@@ -43,7 +46,9 @@ The public headers are in `include/slipstream/`, where `messages.hpp` defines th
 
 Under `src/codec/`, `encode.cpp` and `decode.cpp` handle individual frames. The byte helpers are private to this directory (`byte_reader.hpp` and `byte_writer.hpp`), and `stream_decoder.cpp` buffers incoming data until it can extract complete frames.
 
-The tests are in `tests/`, with fixed byte fixtures and shared assertions under `codec/support/`. `test_main.cpp` calls the suites declared in `test_suites.hpp`, and the test cases live in `*_tests.cpp`.
+CSV parsing and replay are in `src/replay/`, and the two client entry points are in `src/clients/`.
+
+The codec tests are in `tests/codec/`, with fixed byte fixtures and shared assertions under `tests/codec/support/`. `test_main.cpp` calls the suites declared in `test_suites.hpp`, and the test cases live in `*_tests.cpp`. CSV tests are in `tests/replay/`.
 
 ## A bit about the GCMD/1 and GCOE/1 wire formats
 
