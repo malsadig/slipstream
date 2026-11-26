@@ -48,3 +48,9 @@ add_test(NAME codec_tests COMMAND codec_tests)
 add_test(NAME csv_tests COMMAND csv_tests)
 
 target_link_libraries(slipstream_replay PUBLIC slipstream_codec)
+
+add_executable(md_client src/clients/md_client.cpp)
+target_link_libraries(md_client PRIVATE slipstream_replay)
+
+add_executable(oe_client src/clients/oe_client.cpp)
+target_link_libraries(oe_client PRIVATE slipstream_replay)
