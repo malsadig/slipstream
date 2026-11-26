@@ -17,16 +17,19 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Symbol parsed: " << symbol << '\n';
         std::cout << "Window (ns): " << config->vwap_window_ns << '\n';
+        std::cout << "VWAP capacity: " << config->vwap_capacity << '\n';
+        std::cout << "Report capacity: " << config->report_capacity << '\n';
         return EXIT_SUCCESS;
     }
 
     switch (config.error()) {
         case ConfigError::InvalidConfigCount:
-            std::cerr << "Usage: slipstream --symbol <symbol> --vwap-window-ms <positive integer>" << '\n';
+            std::cerr << "Usage: slipstream --symbol <symbol> --vwap-window-ms "
+                "<positive integer> [--vwap-capacity <entries>] [--report-capacity <entries>]" << '\n';
             break;
 
         case ConfigError::InvalidOption:
-            std::cerr << "Expected the --symbol option." << '\n';
+            std::cerr << "Unknown or repeated option." << '\n';
             break;
 
         case ConfigError::SymbolParseError:
@@ -35,6 +38,12 @@ int main(int argc, char* argv[]) {
         case ConfigError::WindowParseError:
             std::cerr << "Window must be a positive integer in milliseconds "
                 "that fits after conversion to nanoseconds." << '\n';
+            break;
+        case ConfigError::VwapCapacityParseError:
+            std::cerr << "VWAP capacity must be a positive integer that fits in std::size_t." << '\n';
+            break;
+        case ConfigError::ReportCapacityParseError:
+            std::cerr << "Report capacity must be a positive integer that fits in std::size_t." << '\n';
             break;
     }
 

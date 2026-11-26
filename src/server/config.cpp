@@ -15,6 +15,8 @@ namespace slipstream::server {
         ServerConfig config{};
         bool parsedSymbol{false};
         bool parsedWindow{false};
+        bool parsedVwapCapacity{false};
+        bool parsedReportCapacity{false};
 
         for (int i = 1; i < argc; i += 2) {
             const std::string_view option{argv[i]};
@@ -62,6 +64,39 @@ namespace slipstream::server {
                 config.vwap_window_ns = milliseconds * nsPerMs;
 
                 parsedWindow = true;
+            } else if (option == "--vwap-capacity") {
+                if (parsedVwapCapacity) {
+                    return std::unexpected(ConfigError::InvalidOption);
+                }
+
+                std::size_t capacity{};
+
+                const auto end = value.data() + value.size();
+                const auto [ptr, error] =
+                    std::from_chars(value.data(), end, capacity);
+
+                if (error != std::errc{} || ptr != end || capacity == 0) {
+                    return std::unexpected(ConfigError::VwapCapacityParseError);
+                }
+
+                config.vwap_capacity = capacity;
+                parsedVwapCapacity = true;
+            } else if (option == "--report-capacity") {
+                if (parsedReportCapacity) {
+                    return std::unexpected(ConfigError::InvalidOption);
+                }
+
+                std::size_t capacity{};
+
+                const auto end = value.data() + value.size();
+                const auto [ptr, error] = std::from_chars(value.data(), end, capacity);
+
+                if (error != std::errc{} || ptr != end || capacity == 0) {
+                    return std::unexpected(ConfigError::ReportCapacityParseError);
+                }
+
+                config.report_capacity = capacity;
+                parsedReportCapacity = true;
             } else {
                 return std::unexpected(ConfigError::InvalidOption);
             }
