@@ -7,10 +7,13 @@
 #include <chrono>
 #include <cstddef>
 #include <ostream>
+#include <istream>
 
 namespace slipstream::replay {
     std::vector<std::uint64_t> replayOffsetsNs(const std::vector<CsvRow>& rows);
 
     std::size_t replayRows(const std::vector<CsvRow>& rows, MessageType selection, 
         std::ostream& output, std::chrono::system_clock::time_point replay_start, bool paced = true);
+
+    std::vector<NewOrder> readNewOrders(std::istream& input);
 }

@@ -9,12 +9,12 @@
 #include <string>
 
 int main(int argc, char* argv[]) {
-    if (argc != 3 && (argc != 4 || std::string_view(argv[3]) != "--no-wait")) {
-        std::cerr << "Usage: oe_client <input.csv> <output.bin> [--no-wait]\n";
+    if (argc != 4 && (argc != 5 || std::string_view(argv[4]) != "--no-wait")) {
+        std::cerr << "Usage: oe_client <input.csv> <trades.bin> <responses.bin> [--no-wait]\n";
         return 1;
     }
 
-    bool paced{argc == 3};
+    bool paced{argc == 4};
 
     try {
         std::ifstream input{argv[1]};
@@ -23,7 +23,15 @@ int main(int argc, char* argv[]) {
             throw std::runtime_error("Failure opening input " + std::string(argv[1]));
         }
 
+        std::ifstream responses{argv[3], std::ios::binary};
+
+        if (!responses) {
+            throw std::runtime_error("Failure opening responses " + std::string(argv[3]));
+        }
+
         const auto rows = slipstream::replay::readCsvRows(input);
+
+        const auto orders = slipstream::replay::readNewOrders(responses);
 
         std::ofstream output(argv[2], std::ios::binary);
 

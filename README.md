@@ -25,7 +25,17 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-CTest runs `codec_tests`, which calls all the test suites.
+CTest runs `codec_tests` and `csv_tests`.
+
+## Run both clients
+
+After building, run both clients concurrently with the supplied `QandT.csv` and real-time pacing:
+
+```bash
+./build/md_client QandT.csv build/quotes.bin && ./build/oe_client QandT.csv build/trades.bin /dev/null
+```
+
+This runs the M1 file-based paths; TCP transport is not implemented yet. This will output the trades and quotes in time-spaced order as the timestamps/elapsed time suggests.
 
 ## Where things are
 

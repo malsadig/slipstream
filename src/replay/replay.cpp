@@ -1,10 +1,13 @@
 #include "slipstream/replay/replay.hpp"
 #include "slipstream/codec.hpp"
+#include "slipstream/stream_decoder.hpp"
 
 #include <stdexcept>
 #include <string>
 #include <array>
 #include <thread>
+#include <variant>
+#include <iostream>
 
 namespace slipstream::replay {
     std::vector<std::uint64_t> replayOffsetsNs(const std::vector<CsvRow>& rows) {
@@ -112,6 +115,30 @@ namespace slipstream::replay {
             } else {
                 ++emittedFrames;
             }
+
+            // TODO: Remove the following when slipstream server is implemented
+
+            std::string line = selection == MessageType::QUOTE ? "[MD]" : "[OE]";
+
+            line += " replay_ts_ns=" + std::to_string(timestamp_ns);
+
+            if (selection == MessageType::TRADE) {
+                line += " trade_id=" + std::to_string(idx + 1);
+            }
+
+            line += " source_csv=";
+            for (std::size_t column = 0; column < row.fields.size(); ++column) {
+                if (column != 0) {
+                    line += ',';
+                }
+                line += row.fields[column];
+            }
+            line += '\n';
+
+            std::cerr.write(
+                line.data(),
+                static_cast<std::streamsize>(line.size())
+            );
         }
 
         output.flush();
@@ -120,5 +147,50 @@ namespace slipstream::replay {
         }
 
         return emittedFrames;
+    }
+
+    std::vector<NewOrder> readNewOrders(std::istream& input) {
+        StreamDecoder decoder{};
+        std::vector<NewOrder> newOrders{};
+        std::array<std::byte, 64> buffer{};
+
+        while (input) {
+            input.read(
+                reinterpret_cast<char*>(buffer.data()),
+                static_cast<std::streamsize>(buffer.size())
+            );
+            const auto count = input.gcount();
+
+            if (count > 0) {
+                auto result = decoder.feed(
+                    std::span<const std::byte>{buffer}.first(
+                        static_cast<std::size_t>(count)
+                    )
+                );
+
+                if (result.error != CodecError::NONE) {
+                    throw std::runtime_error("Decoder error.");
+                }
+
+                for (auto& message : result.messages) {
+                    const NewOrder* newOrder = std::get_if<NewOrder>(&message);
+                    if (newOrder != nullptr) {
+                        newOrders.push_back(*newOrder);
+                    } else {
+                        throw std::runtime_error("Expected a NewOrder response.");
+                    }
+                }
+            }
+        }
+
+        if (input.bad() || !input.eof()) {
+            throw std::runtime_error("Error after input read loop.");
+        }
+
+        if (decoder.finish() != CodecError::NONE) {
+            throw std::runtime_error("Error with decoder finish");
+        }
+
+        return newOrders;
     }
 }
