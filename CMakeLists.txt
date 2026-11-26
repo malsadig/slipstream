@@ -16,6 +16,12 @@ add_library(slipstream_codec STATIC
 
 target_include_directories(slipstream_codec PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
+add_executable(slipstream
+    src/server/main.cpp
+    src/server/config.cpp
+)
+target_link_libraries(slipstream PRIVATE slipstream_codec)
+
 add_executable(codec_tests
     tests/codec/test_main.cpp
     tests/codec/heartbeat_tests.cpp
