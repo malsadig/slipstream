@@ -30,6 +30,7 @@ target_link_libraries(codec_tests PRIVATE slipstream_codec)
 
 add_library(slipstream_replay STATIC
     src/replay/csv.cpp
+    src/replay/replay.cpp
 )
 
 target_include_directories(slipstream_replay PUBLIC
@@ -45,3 +46,5 @@ target_link_libraries(csv_tests PRIVATE slipstream_replay)
 enable_testing()
 add_test(NAME codec_tests COMMAND codec_tests)
 add_test(NAME csv_tests COMMAND csv_tests)
+
+target_link_libraries(slipstream_replay PUBLIC slipstream_codec)
