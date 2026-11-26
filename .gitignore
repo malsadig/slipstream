@@ -78,3 +78,5 @@ build.ninja
 ._*
 Thumbs.db
 Desktop.ini
+
+/.vscode/
