@@ -13,10 +13,18 @@ namespace slipstream::server {
         }
 
         ServerConfig config{};
+
         bool parsedSymbol{false};
         bool parsedWindow{false};
         bool parsedVwapCapacity{false};
         bool parsedReportCapacity{false};
+
+        bool parsedMdHost{false};
+        bool parsedMdPort{false};
+        bool parsedOeHost{false};
+        bool parsedOePort{false};
+
+        bool parsedTransport{false};
 
         for (int i = 1; i < argc; i += 2) {
             const std::string_view option{argv[i]};
@@ -97,12 +105,58 @@ namespace slipstream::server {
 
                 config.report_capacity = capacity;
                 parsedReportCapacity = true;
+            } else if (option == "--md-host" || option == "--oe-host") {
+                const bool isMd = option == "--md-host";
+                auto& endpoint = isMd ? config.md : config.oe;
+                auto& parsed = isMd ? parsedMdHost : parsedOeHost;
+
+                if (parsed) {
+                    return std::unexpected(ConfigError::InvalidOption);
+                }
+                if (value.empty()) {
+                    return std::unexpected(ConfigError::HostParseError);
+                }
+
+                endpoint.host = value;
+                parsed = true;
+            } else if (option == "--md-port" || option == "--oe-port") {
+                const bool isMd = option == "--md-port";
+                auto& endpoint = isMd ? config.md : config.oe;
+                auto& parsed = isMd ? parsedMdPort : parsedOePort;
+
+                if (parsed) {
+                    return std::unexpected(ConfigError::InvalidOption);
+                }
+
+                std::uint16_t port{};
+
+                const auto end = value.data() + value.size();
+                const auto [ptr, error] =
+                    std::from_chars(value.data(), end, port);
+
+                if (error != std::errc{} || ptr != end || port == 0) {
+                    return std::unexpected(ConfigError::PortParseError);
+                }
+
+                endpoint.port = port;
+                parsed = true;
+            } else if (option == "--transport") {
+                if (parsedTransport) {
+                    return std::unexpected(ConfigError::InvalidOption);
+                }
+                if (value != "tcp") {
+                    return std::unexpected(ConfigError::TransportParseError);
+                }
+
+                config.transport = Transport::TCP;
+                parsedTransport = true;
             } else {
                 return std::unexpected(ConfigError::InvalidOption);
             }
         }
 
-        if (!parsedSymbol || !parsedWindow) {
+        if (!parsedSymbol || !parsedWindow || !parsedMdHost || !parsedMdPort ||
+            !parsedOeHost || !parsedOePort || !parsedTransport) {
             return std::unexpected(ConfigError::InvalidConfigCount);
         }
 

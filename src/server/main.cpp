@@ -19,13 +19,20 @@ int main(int argc, char* argv[]) {
         std::cout << "Window (ns): " << config->vwap_window_ns << '\n';
         std::cout << "VWAP capacity: " << config->vwap_capacity << '\n';
         std::cout << "Report capacity: " << config->report_capacity << '\n';
+        std::cout << "MD endpoint: " << config->md.host << ':' << config->md.port << '\n';
+        std::cout << "OE endpoint: " << config->oe.host << ':' << config->oe.port << '\n';
         return EXIT_SUCCESS;
     }
 
     switch (config.error()) {
         case ConfigError::InvalidConfigCount:
-            std::cerr << "Usage: slipstream --symbol <symbol> --vwap-window-ms "
-                "<positive integer> [--vwap-capacity <entries>] [--report-capacity <entries>]" << '\n';
+            std::cerr << "Usage: slipstream --symbol <symbol> "
+                "--vwap-window-ms <positive integer> "
+                "--md-host <host> --md-port <port> "
+                "--oe-host <host> --oe-port <port> "
+                "--transport tcp "
+                "[--vwap-capacity <entries>] "
+                "[--report-capacity <entries>]" << '\n';
             break;
 
         case ConfigError::InvalidOption:
@@ -44,6 +51,15 @@ int main(int argc, char* argv[]) {
             break;
         case ConfigError::ReportCapacityParseError:
             std::cerr << "Report capacity must be a positive integer that fits in std::size_t." << '\n';
+            break;
+        case ConfigError::HostParseError:
+            std::cerr << "Host must not be empty.\n";
+            break;
+        case ConfigError::PortParseError:
+            std::cerr << "Port must be an integer from 1 to 65535.\n";
+            break;
+        case ConfigError::TransportParseError:
+            std::cerr << "Transport must be tcp for M2.\n";
             break;
     }
 
