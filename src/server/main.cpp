@@ -1,9 +1,13 @@
 #include "slipstream/server/message_handler.hpp"
 #include "slipstream/server/config.hpp"
+#include "slipstream/server/unique_fd.hpp"
+#include "slipstream/server/tcp_socket.hpp"
 
+#include <system_error>
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
+#include <exception>
 
 int main(int argc, char* argv[]) {
     auto config = slipstream::server::parseConfig(argc, argv);
@@ -21,7 +25,18 @@ int main(int argc, char* argv[]) {
         std::cout << "Report capacity: " << config->report_capacity << '\n';
         std::cout << "MD endpoint: " << config->md.host << ':' << config->md.port << '\n';
         std::cout << "OE endpoint: " << config->oe.host << ':' << config->oe.port << '\n';
-        return EXIT_SUCCESS;
+        
+        try {
+            auto mdSocket = slipstream::server::createTcpSocket();
+            slipstream::server::bindTcpSocket(mdSocket, config->md);
+
+            std::cout << "MD socket bound to " << config->md.host << ':' << config->md.port << '\n';
+
+            return EXIT_SUCCESS;
+        } catch (const std::exception& error) {
+            std::cerr << "MD socket setup failed: " << error.what() << '\n';
+            return EXIT_FAILURE;
+        }
     }
 
     switch (config.error()) {

@@ -19,6 +19,7 @@ target_include_directories(slipstream_codec PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/
 add_executable(slipstream
     src/server/main.cpp
     src/server/config.cpp
+    src/server/tcp_socket.cpp
 )
 target_link_libraries(slipstream PRIVATE slipstream_codec)
 
