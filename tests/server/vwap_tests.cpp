@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <array>
 #include <string_view>
+#include <vector>
 
 using slipstream::server::FeedRole;
 using slipstream::server::L1Handler;
@@ -27,6 +28,17 @@ static Quote makeQuote(std::uint64_t ts, std::int64_t bid_px, std::uint32_t bid_
 
     return quote;
 }
+
+class CapturingReports final : public slipstream::server::IReportSink {
+public:
+    std::vector<slipstream::server::ReportSnapshot> reports;
+
+    void publish(
+        const slipstream::server::ReportSnapshot& report
+    ) override {
+        reports.push_back(report);
+    }
+};
 
 int main() {
     {
@@ -181,5 +193,47 @@ int main() {
         assert(mean.value().has_value());
         assert(mean.value() == 0);
         assert(mean.count() == 2);
+    }
+
+    {
+        CapturingReports sink;
+        L1Handler handler{"SYNTH1", 10, 4, &sink};
+
+        handler.onMessage(
+            FeedRole::MarketData,
+            makeQuote(100, 200000, 200, 210000, 300)
+        );
+
+        assert(sink.reports.size() == 1);
+        assert(sink.reports[0].ts_ns == 100);
+        assert(sink.reports[0].window_quotes == 1);
+        assert(sink.reports[0].has_vwap);
+        assert(sink.reports[0].vwap_px == 206000);
+        assert((sink.reports[0].symbol ==
+                std::array<char, kSymbolSize>{'S', 'Y', 'N', 'T', 'H', '1'}));
+
+        handler.onMessage(
+            FeedRole::MarketData,
+            makeQuote(1000, 900000, 1, 910000, 1, "SYNTH2")
+        );
+
+        Trade trade{};
+        std::copy_n("SYNTH1", 6, trade.symbol);
+        trade.ts_ns = 1000;
+        handler.onMessage(FeedRole::OrderEntry, trade);
+        handler.onMessage(FeedRole::OrderEntry, Heartbeat{1000});
+
+        assert(sink.reports.size() == 1);
+
+        // Cancellation expires the old contribution and still publishes a row.
+        handler.onMessage(
+            FeedRole::MarketData,
+            makeQuote(111, 0, 0, 0, 0)
+        );
+
+        assert(sink.reports.size() == 2);
+        assert(sink.reports[1].ts_ns == 111);
+        assert(sink.reports[1].window_quotes == 0);
+        assert(!sink.reports[1].has_vwap);
     }
 }

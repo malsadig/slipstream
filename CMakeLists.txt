@@ -75,3 +75,12 @@ target_link_libraries(report_queue_tests
 )
 add_test(NAME report_queue_tests COMMAND report_queue_tests)
 set_tests_properties(report_queue_tests PROPERTIES TIMEOUT 10)
+
+add_executable(async_reporter_tests tests/server/async_reporter_tests.cpp)
+target_link_libraries(async_reporter_tests
+    PRIVATE slipstream_codec Threads::Threads
+)
+add_test(NAME async_reporter_tests COMMAND async_reporter_tests)
+set_tests_properties(async_reporter_tests PROPERTIES TIMEOUT 10)
+
+target_link_libraries(slipstream PRIVATE Threads::Threads)

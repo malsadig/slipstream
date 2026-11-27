@@ -18,10 +18,11 @@ namespace slipstream::server {
         }
     }
 
-    void runTcpFeeds(const UniqueFd& md, const UniqueFd& oe, IMessageHandler& handler) {
-        std::array<pollfd, 2> sockets {{
+    void runTcpFeeds(const UniqueFd& md, const UniqueFd& oe, IMessageHandler& handler, int failure_fd) {
+        std::array<pollfd, 3> sockets {{
             {md.get(), POLLIN, 0},
             {oe.get(), POLLIN, 0},
+            {failure_fd, POLLIN, 0},
         }};
 
         std::array<StreamDecoder, 2> decoders{};
@@ -44,7 +45,11 @@ namespace slipstream::server {
                 throw std::system_error(error, std::generic_category(), "poll");
             }
 
-            for (auto i{0uz}; i < sockets.size(); ++i) {
+            if (sockets[2].revents != 0) {
+                fail("Reporter", "output failure or invalid control descriptor");
+            }
+
+            for (auto i{0uz}; i < decoders.size(); ++i) {
                 const short events = sockets[i].revents;
 
                 if (events & POLLNVAL) {

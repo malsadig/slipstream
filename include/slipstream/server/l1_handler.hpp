@@ -2,8 +2,10 @@
 
 #include "slipstream/server/message_handler.hpp"
 #include "slipstream/server/rolling_vwap.hpp"
+#include "slipstream/server/report_sink.hpp"
 
 #include <cstdint>
+#include <algorithm>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -26,7 +28,8 @@ namespace slipstream::server {
     class L1Handler final : public IMessageHandler {
     public:
         explicit L1Handler(std::string_view symbol, std::uint64_t window_ns, 
-            std::size_t capacity): symbol_(symbol), vwap_(window_ns, capacity) {}
+            std::size_t capacity, IReportSink* reports = nullptr): 
+            symbol_(symbol), vwap_(window_ns, capacity), reports_(reports) {}
 
         void onMessage(FeedRole role, const Message& message) override {
             if (role == FeedRole::MarketData) {
@@ -48,6 +51,23 @@ namespace slipstream::server {
                     makeLevel(quote->bid_px, quote->bid_qty),
                     makeLevel(quote->ask_px, quote->ask_qty)
                 };
+
+                if (reports_) {
+                    const auto value = vwap_.value();
+                    
+                    ReportSnapshot report{};
+                    report.ts_ns = book_.ts_ns;
+                    std::copy_n(
+                        quote->symbol,
+                        report.symbol.size(),
+                        report.symbol.begin()
+                    );
+                    report.window_quotes = vwap_.count();
+                    report.vwap_px = value.value_or(0);
+                    report.has_vwap = value.has_value();
+
+                    reports_->publish(report);
+                }
                 return;
             }
 
@@ -95,5 +115,6 @@ namespace slipstream::server {
         std::string symbol_;
         RollingVwap vwap_;
         L1Book book_{};
+        IReportSink* reports_{}; // Borrowed; must outlive the handler.
     };
 }
