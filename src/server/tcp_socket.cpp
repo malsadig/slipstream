@@ -55,4 +55,30 @@ namespace slipstream::server {
 
         throw std::system_error(lastError, std::generic_category(), "bind");
     }
+
+    void listenTcpSocket(const UniqueFd& socket) {
+        constexpr int backlog{1};
+
+        if (::listen(socket.get(), backlog) == -1) {
+            const int error = errno;
+            throw std::system_error(error, std::generic_category(), "listen");
+        }
+    }
+
+    UniqueFd acceptTcpClient(const UniqueFd& listener) {
+        for (;;) {
+            const int fd = ::accept(listener.get(), nullptr, nullptr);
+
+            if (fd >= 0) {
+                return UniqueFd{fd};
+            }
+
+            const int error = errno;
+            if (error == EINTR) {
+                continue;
+            }
+
+            throw std::system_error(error, std::generic_category(), "accept");
+        }
+    }
 }

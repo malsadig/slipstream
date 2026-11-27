@@ -2,6 +2,8 @@
 #include "slipstream/server/config.hpp"
 #include "slipstream/server/unique_fd.hpp"
 #include "slipstream/server/tcp_socket.hpp"
+#include "slipstream/server/l1_handler.hpp"
+#include "slipstream/server/tcp_feed.hpp"
 
 #include <system_error>
 #include <cstdlib>
@@ -27,14 +29,40 @@ int main(int argc, char* argv[]) {
         std::cout << "OE endpoint: " << config->oe.host << ':' << config->oe.port << '\n';
         
         try {
-            auto mdSocket = slipstream::server::createTcpSocket();
-            slipstream::server::bindTcpSocket(mdSocket, config->md);
+            auto mdListener = slipstream::server::createTcpSocket();
+            slipstream::server::bindTcpSocket(mdListener, config->md);
+            slipstream::server::listenTcpSocket(mdListener);
 
-            std::cout << "MD socket bound to " << config->md.host << ':' << config->md.port << '\n';
+            auto oeListener = slipstream::server::createTcpSocket();
+            slipstream::server::bindTcpSocket(oeListener, config->oe);
+            slipstream::server::listenTcpSocket(oeListener);
+
+            std::cout << "MD listening on "
+                << config->md.host << ':' << config->md.port << '\n'
+                << "OE listening on "
+                << config->oe.host << ':' << config->oe.port << '\n'
+                << "Waiting for both clients...\n"
+                << std::flush;
+            
+            auto mdConnection = slipstream::server::acceptTcpClient(mdListener);
+
+            std::cout << "MD accepted (fd=" << mdConnection.get()
+                << ")\n" << std::flush;
+
+            auto oeConnection = slipstream::server::acceptTcpClient(oeListener);
+
+            std::cout << "OE accepted (fd=" << oeConnection.get()
+                << ")\n";
+
+            slipstream::server::L1Handler handler{symbol};
+
+            slipstream::server::runTcpFeeds(mdConnection, oeConnection, handler);
+
+            std::cout << "Feeds ended cleanly.\n";
 
             return EXIT_SUCCESS;
         } catch (const std::exception& error) {
-            std::cerr << "MD socket setup failed: " << error.what() << '\n';
+            std::cerr << "Server failed: " << error.what() << '\n';
             return EXIT_FAILURE;
         }
     }

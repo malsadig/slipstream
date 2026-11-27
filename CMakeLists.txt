@@ -20,6 +20,7 @@ add_executable(slipstream
     src/server/main.cpp
     src/server/config.cpp
     src/server/tcp_socket.cpp
+    src/server/tcp_feed.cpp
 )
 target_link_libraries(slipstream PRIVATE slipstream_codec)
 
