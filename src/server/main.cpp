@@ -111,6 +111,9 @@ int main(int argc, char* argv[]) {
         case ConfigError::InvalidConfigCount:
             std::cerr << "Usage: slipstream --symbol <symbol> "
                 "--vwap-window-ms <positive integer> "
+                "--max-quantity <positive integer> "
+                "--band-bps <decimal> "
+                "--participation-cap <decimal> "
                 "--md-host <host> --md-port <port> "
                 "--oe-host <host> --oe-port <port> "
                 "--transport tcp "
@@ -142,7 +145,18 @@ int main(int argc, char* argv[]) {
             std::cerr << "Port must be an integer from 1 to 65535.\n";
             break;
         case ConfigError::TransportParseError:
-            std::cerr << "Transport must be tcp for M2.\n";
+            std::cerr << "Transport must be tcp.\n";
+            break;
+        case ConfigError::MaxQuantityParseError:
+            std::cerr << "Max quantity must be an integer from 1 to 4294967295.\n";
+            break;
+        case ConfigError::BandParseError:
+            std::cerr << "Band must be an unsigned decimal from 0 to 10000 bps "
+                "with at most 4 fractional digits.\n";
+            break;
+        case ConfigError::ParticipationCapParseError:
+            std::cerr << "Participation cap must be an unsigned decimal from 0 to 1 "
+                "with at most 4 fractional digits.\n";
             break;
     }
 

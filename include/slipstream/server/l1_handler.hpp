@@ -3,6 +3,8 @@
 #include "slipstream/server/message_handler.hpp"
 #include "slipstream/server/rolling_vwap.hpp"
 #include "slipstream/server/report_sink.hpp"
+#include "slipstream/server/warmup_gate.hpp"
+#include "slipstream/server/l1_book.hpp"
 
 #include <cstdint>
 #include <algorithm>
@@ -14,22 +16,13 @@
 #include <cstddef>
 
 namespace slipstream::server {
-    struct BookLevel {
-        std::int64_t px{};
-        std::uint32_t qty{};
-    };
-
-    struct L1Book {
-        std::uint64_t ts_ns{};
-        std::optional<BookLevel> bid;
-        std::optional<BookLevel> ask;
-    };
 
     class L1Handler final : public IMessageHandler {
     public:
         explicit L1Handler(std::string_view symbol, std::uint64_t window_ns, 
             std::size_t capacity, IReportSink* reports = nullptr): 
-            symbol_(symbol), vwap_(window_ns, capacity), reports_(reports) {}
+            symbol_(symbol), vwap_(window_ns, capacity), 
+            warmup_(window_ns), reports_(reports) {}
 
         void onMessage(FeedRole role, const Message& message) override {
             if (role == FeedRole::MarketData) {
@@ -51,6 +44,8 @@ namespace slipstream::server {
                     makeLevel(quote->bid_px, quote->bid_qty),
                     makeLevel(quote->ask_px, quote->ask_qty)
                 };
+
+                warmup_.onQuote(quote->ts_ns);
 
                 if (reports_) {
                     const auto value = vwap_.value();
@@ -89,6 +84,10 @@ namespace slipstream::server {
             throw std::runtime_error("OE requires Trade or Heartbeat messages");
         }
 
+        [[nodiscard]] bool warmedUp() const noexcept {
+            return warmup_.ready();
+        }
+
         [[nodiscard]] const L1Book& book() const noexcept {
             return book_;
         }
@@ -114,6 +113,7 @@ namespace slipstream::server {
 
         std::string symbol_;
         RollingVwap vwap_;
+        WarmupGate warmup_;
         L1Book book_{};
         IReportSink* reports_{}; // Borrowed; must outlive the handler.
     };

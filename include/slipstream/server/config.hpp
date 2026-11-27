@@ -22,6 +22,10 @@ struct ServerConfig {
     EndpointConfig md{};
     EndpointConfig oe{};
     Transport transport{Transport::TCP};
+
+    std::uint32_t max_quantity{};
+    std::uint32_t band_bps_x10000{};
+    std::uint32_t participation_cap_x10000{};
 };
 
 enum class ConfigError {
@@ -34,6 +38,10 @@ enum class ConfigError {
     HostParseError,
     PortParseError,
     TransportParseError,
+    
+    MaxQuantityParseError,
+    BandParseError,
+    ParticipationCapParseError,
 };
 
 namespace slipstream::server {
