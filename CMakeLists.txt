@@ -39,6 +39,7 @@ target_link_libraries(codec_tests PRIVATE slipstream_codec)
 add_library(slipstream_replay STATIC
     src/replay/csv.cpp
     src/replay/replay.cpp
+    src/replay/tcp_replay.cpp
 )
 
 target_include_directories(slipstream_replay PUBLIC

@@ -141,6 +141,12 @@ namespace slipstream::replay {
             );
         }
 
+        if (paced && !offsets.empty()) {
+            std::this_thread::sleep_until(
+                steady_start + std::chrono::nanoseconds(offsets.back())
+            );
+        }
+
         output.flush();
         if (!output) {
             throw std::runtime_error("Error in output after loop.");

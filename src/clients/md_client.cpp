@@ -1,4 +1,5 @@
 #include "slipstream/replay/replay.hpp"
+#include "slipstream/replay/tcp_replay.hpp"
 
 #include <chrono>
 #include <exception>
@@ -9,8 +10,17 @@
 #include <string>
 
 int main(int argc, char* argv[]) {
+    if (argc >= 3 && std::string_view{argv[2]} == "--tcp") {
+        return slipstream::replay::runTcpReplay(
+            argc, argv, MessageType::QUOTE
+        );
+    }
     if (argc != 3 && (argc != 4 || std::string_view(argv[3]) != "--no-wait")) {
-        std::cerr << "Usage: md_client <input.csv> <output.bin> [--no-wait]\n";
+        std::cerr
+            << "Usage:\n"
+            << "  md_client <input.csv> <output.bin> [--no-wait]\n"
+            << "  md_client <input.csv> --tcp <host> <port> "
+            "--start-at-ns <unix-ns>" << '\n';
         return 1;
     }
 
