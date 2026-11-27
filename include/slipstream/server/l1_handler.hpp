@@ -37,6 +37,18 @@ namespace slipstream::server {
         }
 
         void onMessage(FeedRole role, const Message& message) override {
+            if (role == FeedRole::Console) {
+                const auto* control = std::get_if<SessionControl>(&message);
+                if (!control || !orders_) {
+                    throw std::runtime_error(
+                        "Console requires SessionControl and an order sink"
+                    );
+                }
+
+                orders_->send(*control);
+                session_state_ = control->state;
+                return;
+            }
             if (role == FeedRole::MarketData) {
                 const auto* quote = std::get_if<Quote>(&message);
 
@@ -87,7 +99,12 @@ namespace slipstream::server {
                     return;
                 }
 
-                const auto status = decisions_->decide(*trade, book_, vwap_.value(), warmedUp());
+                const auto status = decisions_->decide(
+                    *trade,
+                    book_,
+                    vwap_.value(),
+                    warmedUp() && session_state_ == SessionState::OPEN
+                );
 
                 if (!status) {
                     return;
@@ -153,5 +170,6 @@ namespace slipstream::server {
         DecisionEngine* decisions_{}; // Borrowed.
         IOrderSink* orders_{};        // Borrowed.
         std::uint64_t last_order_id_{};
+        SessionState session_state_{SessionState::OPEN};
     };
 }

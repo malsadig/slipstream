@@ -18,22 +18,23 @@ namespace slipstream::server {
     public:
         explicit TcpOrderSink(int fd) : fd_(fd) {}
 
-        void send(NewOrder order) override {
+        template<class T>
+        void sendStamped(T message) {
             const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::system_clock::now().time_since_epoch()
             ).count();
 
             if (now < 0) {
-                throw std::runtime_error("Negative order timestamp");
+                throw std::runtime_error("Cannot encode OE timestamp");
             }
 
-            order.ts_ns = static_cast<std::uint64_t>(now);
+            message.ts_ns = static_cast<std::uint64_t>(now);
 
             std::array<std::byte, kNewOrderWireSize> frame{};
-            const auto encoded = encode(order, frame);
+            const auto encoded = encode(message, frame);
 
             if (encoded.error != CodecError::NONE) {
-                throw std::runtime_error("Cannot encode NewOrder");
+                throw std::runtime_error("Cannot encode message");
             }
 
             std::size_t sent{};
@@ -64,6 +65,14 @@ namespace slipstream::server {
 
                 throw std::runtime_error("OE send made no progress");
             }
+        }
+
+        void send(NewOrder order) override {
+            sendStamped(order);
+        }
+
+        void send(SessionControl control) override {
+            sendStamped(control);
         }
     private:
         int fd_;

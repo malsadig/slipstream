@@ -11,18 +11,121 @@
 #include <poll.h>
 #include <sys/socket.h>
 
+#include <iostream>
+#include <string_view>
+#include <unistd.h>
+
 namespace slipstream::server {
     namespace {
         [[noreturn]] void fail(const char* feed, const char* reason) {
             throw std::runtime_error(std::string{feed} + ": " + reason);
         }
+
+        class ConsoleInput {
+        public:
+            int fd() const noexcept {
+                return fd_;
+            }
+
+            bool consume(short events, IMessageHandler& handler) {
+                if (events & POLLNVAL) {
+                    fd_ = -1;
+                    return false;
+                }
+
+                if (events & POLLERR) {
+                    throw std::runtime_error("Console input error");
+                }
+
+                if (!(events & (POLLIN | POLLHUP))) {
+                    return false;
+                }
+
+                std::array<char, 128> bytes{};
+                const auto count = ::read(fd_, bytes.data(), bytes.size());
+
+                if (count == -1) {
+                    const int error = errno;
+                    if (error == EINTR || error == EAGAIN || error == EWOULDBLOCK) {
+                        return false;
+                    }
+
+                    throw std::system_error(error, std::generic_category(), "Console read");
+                }
+                
+                if (count == 0) {
+                    fd_ = -1;
+                    return finishLine(handler);
+                }
+
+                for (auto i{0uz}; i < static_cast<std::size_t>(count); ++i) {
+                    const char c = bytes[i];
+
+                    if (c == '\n') {
+                        if (finishLine(handler)) {
+                            return true;
+                        }
+                    } else if (!overlong_) {
+                        if (used_ == line_.size()) {
+                            overlong_ = true;
+                        } else {
+                            line_[used_++] = c;
+                        }
+                    }
+                }
+                return false;
+            }
+        private:
+            bool finishLine(IMessageHandler& handler) {
+                if (overlong_) {
+                    used_ = 0;
+                    overlong_ = false;
+                    std::cerr << "Console command too long" << '\n';
+                    return false;
+                }
+
+                std::string_view command{line_.data(), used_};
+
+                used_ = 0;
+
+                if (!command.empty() && command.back() == '\r') {
+                    command.remove_suffix(1);
+                }
+                if (command.empty()) {
+                    return false;
+                }
+
+                SessionControl control{};
+                if (command == "HALT") {
+                    control.state = SessionState::HALT;
+                } else if (command == "OPEN") {
+                    control.state = SessionState::OPEN;
+                } else if (command == "CLOSE") {
+                    control.state = SessionState::CLOSE;
+                } else {
+                    std::cerr << "Commands: HALT, OPEN, or CLOSE" << '\n';
+                    return false;
+                }
+
+                handler.onMessage(FeedRole::Console, Message{control});
+                return control.state == SessionState::CLOSE;
+            }
+
+            int fd_{STDIN_FILENO};
+            std::array<char, 64> line_{};
+            std::size_t used_{};
+            bool overlong_{};
+        };
     }
 
     void runTcpFeeds(const UniqueFd& md, const UniqueFd& oe, IMessageHandler& handler, int failure_fd) {
-        std::array<pollfd, 3> sockets {{
+        ConsoleInput console;
+
+        std::array<pollfd, 4> sockets {{
             {md.get(), POLLIN, 0},
             {oe.get(), POLLIN, 0},
             {failure_fd, POLLIN, 0},
+            {console.fd(), POLLIN, 0},
         }};
 
         std::array<StreamDecoder, 2> decoders{};
@@ -48,6 +151,11 @@ namespace slipstream::server {
             if (sockets[2].revents != 0) {
                 fail("Reporter", "output failure or invalid control descriptor");
             }
+
+            if (console.consume(sockets[3].revents, handler)) {
+                return; // CLOSE: existing owner cleans up sockets and reporter.
+            }
+            sockets[3].fd = console.fd();
 
             for (auto i{0uz}; i < decoders.size(); ++i) {
                 const short events = sockets[i].revents;

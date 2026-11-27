@@ -246,9 +246,31 @@ namespace slipstream::replay {
                 );
 
                 for (const auto& message : result.messages) {
+                    if (const auto* control = std::get_if<SessionControl>(&message)) {
+                        const char* state = "OPEN";
+                        switch (control->state) {
+                            case SessionState::OPEN:  state = "OPEN";  break;
+                            case SessionState::HALT:  state = "HALT";  break;
+                            case SessionState::CLOSE: state = "CLOSE"; break;
+                        }
+
+                        std::cout << "[SESSION] state=" << state
+                                << " ts_ns=" << control->ts_ns << '\n';
+                        std::cout.flush();
+
+                        if (!std::cout) {
+                            throw std::runtime_error("Cannot print OE response");
+                        }
+
+                        if (control->state == SessionState::CLOSE) {
+                            closed_ = true;
+                        }
+                        continue;
+                    }
+
                     const auto* order = std::get_if<NewOrder>(&message);
                     if (!order) {
-                        throw std::runtime_error("Expected a NewOrder response");
+                        throw std::runtime_error("Expected NewOrder or SessionControl response");
                     }
 
                     std::string_view symbol{order->symbol, kSymbolSize};
