@@ -62,3 +62,16 @@ target_link_libraries(md_client PRIVATE slipstream_replay)
 
 add_executable(oe_client src/clients/oe_client.cpp)
 target_link_libraries(oe_client PRIVATE slipstream_replay)
+
+add_executable(vwap_tests tests/server/vwap_tests.cpp)
+target_link_libraries(vwap_tests PRIVATE slipstream_codec)
+add_test(NAME vwap_tests COMMAND vwap_tests)
+
+find_package(Threads REQUIRED)
+
+add_executable(report_queue_tests tests/server/report_queue_tests.cpp)
+target_link_libraries(report_queue_tests
+    PRIVATE slipstream_codec Threads::Threads
+)
+add_test(NAME report_queue_tests COMMAND report_queue_tests)
+set_tests_properties(report_queue_tests PROPERTIES TIMEOUT 10)

@@ -29,6 +29,12 @@ int main(int argc, char* argv[]) {
         std::cout << "OE endpoint: " << config->oe.host << ':' << config->oe.port << '\n';
         
         try {
+            slipstream::server::L1Handler handler{
+                symbol,
+                config->vwap_window_ns,
+                config->vwap_capacity
+            };
+            
             auto mdListener = slipstream::server::createTcpSocket();
             slipstream::server::bindTcpSocket(mdListener, config->md);
             slipstream::server::listenTcpSocket(mdListener);
@@ -53,8 +59,6 @@ int main(int argc, char* argv[]) {
 
             std::cout << "OE accepted (fd=" << oeConnection.get()
                 << ")\n";
-
-            slipstream::server::L1Handler handler{symbol};
 
             slipstream::server::runTcpFeeds(mdConnection, oeConnection, handler);
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "slipstream/server/message_handler.hpp"
+#include "slipstream/server/rolling_vwap.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -8,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <cstddef>
 
 namespace slipstream::server {
     struct BookLevel {
@@ -23,7 +25,8 @@ namespace slipstream::server {
 
     class L1Handler final : public IMessageHandler {
     public:
-        explicit L1Handler(std::string_view symbol) : symbol_(symbol) {}
+        explicit L1Handler(std::string_view symbol, std::uint64_t window_ns, 
+            std::size_t capacity): symbol_(symbol), vwap_(window_ns, capacity) {}
 
         void onMessage(FeedRole role, const Message& message) override {
             if (role == FeedRole::MarketData) {
@@ -37,6 +40,8 @@ namespace slipstream::server {
                 if (!matches(quote->symbol)) {
                     return;
                 }
+
+                vwap_.onQuote(*quote);
 
                 book_ = {
                     quote->ts_ns,
@@ -67,6 +72,10 @@ namespace slipstream::server {
         [[nodiscard]] const L1Book& book() const noexcept {
             return book_;
         }
+
+        [[nodiscard]] const RollingVwap& vwap() const noexcept {
+            return vwap_;
+        }
     private:
         
         // We need to ensure we only match on the substring up until
@@ -84,6 +93,7 @@ namespace slipstream::server {
         }
 
         std::string symbol_;
+        RollingVwap vwap_;
         L1Book book_{};
     };
 }
