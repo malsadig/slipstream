@@ -5,6 +5,10 @@
 #include "slipstream/server/report_sink.hpp"
 #include "slipstream/server/warmup_gate.hpp"
 #include "slipstream/server/l1_book.hpp"
+#include "slipstream/server/decision_engine.hpp"
+#include "slipstream/server/order_sink.hpp"
+
+#include <limits>
 
 #include <cstdint>
 #include <algorithm>
@@ -20,9 +24,17 @@ namespace slipstream::server {
     class L1Handler final : public IMessageHandler {
     public:
         explicit L1Handler(std::string_view symbol, std::uint64_t window_ns, 
-            std::size_t capacity, IReportSink* reports = nullptr): 
+            std::size_t capacity, IReportSink* reports = nullptr,
+            DecisionEngine* decisions = nullptr, IOrderSink* orders = nullptr): 
             symbol_(symbol), vwap_(window_ns, capacity), 
-            warmup_(window_ns), reports_(reports) {}
+            warmup_(window_ns), reports_(reports), decisions_(decisions),
+            orders_(orders)  {
+            if ((decisions_ != nullptr) != (orders_ != nullptr)) {
+                throw std::invalid_argument(
+                    "Decision engine and order sink must be supplied together"
+                );
+            }
+        }
 
         void onMessage(FeedRole role, const Message& message) override {
             if (role == FeedRole::MarketData) {
@@ -47,6 +59,10 @@ namespace slipstream::server {
 
                 warmup_.onQuote(quote->ts_ns);
 
+                if (decisions_) {
+                    decisions_->onQuote(*quote);
+                }
+
                 if (reports_) {
                     const auto value = vwap_.value();
                     
@@ -67,12 +83,30 @@ namespace slipstream::server {
             }
 
             if (const auto* trade = std::get_if<Trade>(&message)) {
-                if (!matches(trade->symbol)) {
+                if (!matches(trade->symbol) || !decisions_) {
                     return;
                 }
 
-                // here is where trade decision logic will go.
-                // to be done in milestone M3.
+                const auto status = decisions_->decide(*trade, book_, vwap_.value(), warmedUp());
+
+                if (!status) {
+                    return;
+                }
+
+                if (last_order_id_ == std::numeric_limits<std::uint64_t>::max()) {
+                    throw std::overflow_error("Order IDs exhausted");
+                }
+
+                NewOrder order{};
+                order.client_order_id = ++last_order_id_;
+                std::copy_n(trade->symbol, kSymbolSize, order.symbol);
+                order.status = *status;
+                order.trade_id = trade->id;
+                order.side = trade->aggressor == Aggressor::BUY ? OrderSide::BUY : OrderSide::SELL;
+                order.qty = trade->qty;
+                order.limit_px = trade->px;
+
+                orders_->send(order);
 
                 return;
             }
@@ -116,5 +150,8 @@ namespace slipstream::server {
         WarmupGate warmup_;
         L1Book book_{};
         IReportSink* reports_{}; // Borrowed; must outlive the handler.
+        DecisionEngine* decisions_{}; // Borrowed.
+        IOrderSink* orders_{};        // Borrowed.
+        std::uint64_t last_order_id_{};
     };
 }

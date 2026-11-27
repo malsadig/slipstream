@@ -5,6 +5,8 @@
 #include "slipstream/server/l1_handler.hpp"
 #include "slipstream/server/tcp_feed.hpp"
 #include "slipstream/server/async_reporter.hpp"
+#include "slipstream/server/decision_engine.hpp"
+#include "slipstream/server/tcp_order_sink.hpp"
 
 #include <cerrno>
 #include <stdexcept>
@@ -53,13 +55,6 @@ int main(int argc, char* argv[]) {
             std::exception_ptr processing_error;
 
             try {
-                L1Handler handler{
-                    symbol,
-                    config->vwap_window_ns,
-                    config->vwap_capacity,
-                    &reporter
-                };
-                
                 auto mdListener = createTcpSocket();
                 bindTcpSocket(mdListener, config->md);
                 listenTcpSocket(mdListener);
@@ -83,6 +78,23 @@ int main(int argc, char* argv[]) {
 
                 std::cerr << "OE accepted (fd=" << oeConnection.get()
                     << ")\n";
+
+                DecisionEngine decisions{
+                    config->max_quantity,
+                    config->band_bps_x10000,
+                    config->participation_cap_x10000
+                };
+
+                TcpOrderSink orders{oeConnection.get()};
+
+                L1Handler handler{
+                    symbol,
+                    config->vwap_window_ns,
+                    config->vwap_capacity,
+                    &reporter,
+                    &decisions,
+                    &orders
+                };
 
                 runTcpFeeds(mdConnection, oeConnection, handler, reporter.failureFd());
             } catch (...) {

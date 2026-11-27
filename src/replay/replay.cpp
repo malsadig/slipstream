@@ -36,7 +36,8 @@ namespace slipstream::replay {
     }
 
     std::size_t replayRows(const std::vector<CsvRow>& rows, MessageType selection, 
-        std::ostream& output, std::chrono::system_clock::time_point replay_start, bool paced) {
+        std::ostream& output, std::chrono::system_clock::time_point replay_start,
+        bool paced, const ReplayWait& wait) {
         if (selection != MessageType::QUOTE && selection != MessageType::TRADE) {
             throw std::runtime_error("Selection must be of type QUOTE or TRADE.");
         }
@@ -60,6 +61,17 @@ namespace slipstream::replay {
         const auto wall_now = std::chrono::system_clock::now();
         const auto steady_now = std::chrono::steady_clock::now();
         const auto steady_start = steady_now + (replay_start - wall_now);
+
+        const auto waitUntil = [&](std::chrono::steady_clock::time_point deadline) {
+            if (wait) {
+                return wait(deadline);
+            }
+
+            std::this_thread::sleep_until(deadline);
+            return true;
+        };
+
+        bool stopped{false};
 
         for (auto idx{0uz}; idx < rows.size(); ++idx) {
             const auto& row = rows[idx];
@@ -95,10 +107,9 @@ namespace slipstream::replay {
                 throw std::runtime_error("Error encoding row #" + std::to_string(idx));
             }
 
-            if (paced) {
-                std::this_thread::sleep_until(
-                    steady_start + std::chrono::nanoseconds(offsets[idx])
-                );
+            if (paced && !waitUntil(steady_start + std::chrono::nanoseconds(offsets[idx]))) {
+                stopped = true;
+                break;
             }
 
             output.write(
@@ -141,8 +152,8 @@ namespace slipstream::replay {
             );
         }
 
-        if (paced && !offsets.empty()) {
-            std::this_thread::sleep_until(
+        if (paced && !stopped && !offsets.empty()) {
+            (void)waitUntil(
                 steady_start + std::chrono::nanoseconds(offsets.back())
             );
         }

@@ -1,6 +1,13 @@
 #include "slipstream/replay/tcp_replay.hpp"
 #include "slipstream/replay/replay.hpp"
 #include "slipstream/server/unique_fd.hpp"
+#include "slipstream/stream_decoder.hpp"
+
+#include <array>
+#include <span>
+#include <variant>
+
+#include <poll.h>
 
 #include <cerrno>
 #include <charconv>
@@ -135,6 +142,142 @@ namespace slipstream::replay {
         private:
             int fd_;
         };
+        
+        class TcpResponseReader {
+        public:
+            explicit TcpResponseReader(int fd) : fd_(fd) {}
+
+            bool waitUntil(std::chrono::steady_clock::time_point deadline) {
+                while (!closed_) {
+                    const auto now = std::chrono::steady_clock::now();
+                    int timeout = 0;
+                    if (deadline > now) {
+                        const auto ms = std::chrono::ceil<std::chrono::milliseconds>(
+                            deadline - now
+                        ).count();
+
+                        timeout = ms > std::numeric_limits<int>::max() ? std::numeric_limits<int>::max() : static_cast<int>(ms);
+                    }
+
+                    pump(timeout);
+
+                    if (closed_) {
+                        return false;
+                    }
+
+                    if (std::chrono::steady_clock::now() >= deadline) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            void finish() {
+                if (closed_) {
+                    return;
+                }
+
+                if (::shutdown(fd_, SHUT_WR) == -1 && errno != ENOTCONN) {
+                    const int error = errno;
+                    throw std::system_error(
+                        error, std::generic_category(), "OE shutdown"
+                    );
+                }
+
+                while (!closed_) {
+                    pump(-1);
+                }
+            }
+        private:
+            void pump(int timeout) {
+                pollfd socket{fd_, POLLIN, 0};
+                const int ready = ::poll(&socket, 1, timeout);
+
+                if (ready == -1) {
+                    const int error = errno;
+                    if (error == EINTR) {
+                        return;
+                    }
+                    throw std::system_error(error, std::generic_category(), "OE response poll");
+                }
+
+                if (ready == 0) {
+                    return;
+                }
+                if (socket.revents & POLLNVAL) {
+                    throw std::runtime_error("Invalid OE response socket");
+                }
+                if (!(socket.revents & (POLLIN | POLLHUP | POLLERR))) {
+                    return;
+                }
+
+                std::array<std::byte, 4096> bytes{};
+                ssize_t received;
+
+                do {
+                    received = ::recv(
+                        fd_, bytes.data(), bytes.size(), MSG_DONTWAIT
+                    );
+                } while (received == -1 && errno == EINTR);
+
+                if (received == -1) {
+                    const int error = errno;
+
+                    if ((error == EAGAIN || error == EWOULDBLOCK) && !(socket.revents & POLLERR)) {
+                        return;
+                    }
+
+                    throw std::system_error(error, std::generic_category(), "OE response recv");
+                }
+
+                if (received == 0) {
+                    if (decoder_.finish() != CodecError::NONE) {
+                        throw std::runtime_error("Incomplete OE response at EOF");
+                    }
+                    closed_ = true;
+                    return;
+                }
+
+                auto result = decoder_.feed(
+                    std::span<const std::byte>{
+                        bytes.data(), static_cast<std::size_t>(received)
+                    }
+                );
+
+                for (const auto& message : result.messages) {
+                    const auto* order = std::get_if<NewOrder>(&message);
+                    if (!order) {
+                        throw std::runtime_error("Expected a NewOrder response");
+                    }
+
+                    std::string_view symbol{order->symbol, kSymbolSize};
+                    symbol = symbol.substr(0, symbol.find('\0'));
+
+                    std::cout << "[ORDER] id=" << order->client_order_id
+                        << " trade_id=" << order->trade_id
+                        << " symbol=" << symbol
+                        << " status=" << static_cast<char>(order->status)
+                        << " side=" << static_cast<char>(order->side)
+                        << " qty=" << order->qty
+                        << " limit_px_x10000=" << order->limit_px
+                        << " ts_ns=" << order->ts_ns << '\n';
+
+                    std::cout.flush();
+                    if (!std::cout) {
+                        throw::std::runtime_error("Cannot print OE response");
+                    }
+                }
+
+                if (result.error != CodecError::NONE) {
+                    throw std::runtime_error("Invalid OE response");
+                }
+            }
+
+            int fd_;
+            StreamDecoder decoder_;
+            bool closed_{};
+        };
     }
 
     int runTcpReplay(int argc, char* argv[], MessageType selection) {
@@ -201,8 +344,22 @@ namespace slipstream::replay {
             std::ostream output{&buffer};
             output.exceptions(std::ios::badbit | std::ios::failbit);
 
-            const auto emitted =
-                replayRows(rows, selection, output, start, true);
+            std::size_t emitted{};
+
+            if (selection == MessageType::TRADE) {
+                TcpResponseReader responses{connection.get()};
+
+                emitted = replayRows(
+                    rows, selection, output, start, true,
+                    [&responses](std::chrono::steady_clock::time_point deadline) {
+                        return responses.waitUntil(deadline);
+                    }
+                );
+
+                responses.finish();
+            } else {
+                emitted = replayRows(rows, selection, output, start, true);
+            }
 
             std::cerr << "Sent " << emitted << " TCP frames" << '\n';
             return 0;
