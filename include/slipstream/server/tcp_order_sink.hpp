@@ -74,6 +74,10 @@ namespace slipstream::server {
         void send(SessionControl control) override {
             sendStamped(control);
         }
+
+        void send(Heartbeat heartbeat) override {
+            sendStamped(heartbeat);
+        }
     private:
         int fd_;
     };

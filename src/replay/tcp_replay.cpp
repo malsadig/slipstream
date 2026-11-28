@@ -268,9 +268,19 @@ namespace slipstream::replay {
                         continue;
                     }
 
+                    if (const auto* heartbeat = std::get_if<Heartbeat>(&message)) {
+                        std::cout << "[HEARTBEAT] ts_ns=" << heartbeat->ts_ns << '\n';
+                        std::cout.flush();
+
+                        if (!std::cout) {
+                            throw std::runtime_error("Cannot print OE response");
+                        }
+                        continue;
+                    }
+
                     const auto* order = std::get_if<NewOrder>(&message);
                     if (!order) {
-                        throw std::runtime_error("Expected NewOrder or SessionControl response");
+                        throw std::runtime_error("Expected NewOrder, Heartbeat or SessionControl response");
                     }
 
                     std::string_view symbol{order->symbol, kSymbolSize};

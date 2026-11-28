@@ -1,5 +1,6 @@
 #include "slipstream/server/tcp_feed.hpp"
 #include "slipstream/stream_decoder.hpp"
+#include "slipstream/server/order_sink.hpp"
 
 #include <array>
 #include <cerrno>
@@ -14,6 +15,8 @@
 #include <iostream>
 #include <string_view>
 #include <unistd.h>
+
+#include <chrono>
 
 namespace slipstream::server {
     namespace {
@@ -118,7 +121,8 @@ namespace slipstream::server {
         };
     }
 
-    void runTcpFeeds(const UniqueFd& md, const UniqueFd& oe, IMessageHandler& handler, int failure_fd) {
+    void runTcpFeeds(const UniqueFd& md, const UniqueFd& oe,
+        IMessageHandler& handler, int failure_fd, IOrderSink& orders) {
         ConsoleInput console;
 
         std::array<pollfd, 4> sockets {{
@@ -138,8 +142,20 @@ namespace slipstream::server {
 
         std::array<std::byte, 4096> buffer{};
 
+        using Clock = std::chrono::steady_clock;
+        constexpr auto stale_interval = std::chrono::seconds{5};
+        auto next_stale = Clock::now() + stale_interval;
+
         for (;;) {
-            if (::poll(sockets.data(), sockets.size(), -1) == -1) {
+            const auto now = Clock::now();
+            const int timeout = now >= next_stale ? 0 : 
+                static_cast<int>(
+                    std::chrono::ceil<std::chrono::milliseconds>(
+                        next_stale - now
+                    ).count()
+                );
+
+            if (::poll(sockets.data(), sockets.size(), timeout) == -1) {
                 const int error = errno;
                 if (error == EINTR) {
                     continue;
@@ -200,6 +216,8 @@ namespace slipstream::server {
                     return;
                 }
 
+                const auto received_at = Clock::now();
+
                 auto result = decoders[i].feed(
                     std::span<const std::byte> {
                         buffer.data(),
@@ -208,12 +226,24 @@ namespace slipstream::server {
                 );
 
                 for (const auto& message : result.messages) {
+                    if (roles[i] == FeedRole::OrderEntry) {
+                        next_stale = received_at + stale_interval;
+                    }
+
                     handler.onMessage(roles[i], message);
                 }
 
                 if (result.error != CodecError::NONE) {
                     fail(names[i], "invalid frame");
                 }
+            }
+
+            if (Clock::now() >= next_stale) {
+                std::cerr << "OE stale: no message for at least 5 seconds\n";
+
+                orders.send(Heartbeat{});
+
+                next_stale = Clock::now() + stale_interval;
             }
         }
     }

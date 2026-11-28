@@ -30,6 +30,15 @@ namespace slipstream::server {
             }
 
             market_qty_ += added;
+
+            if (added != 0) {
+                const Wide numerator =
+                    static_cast<Wide>(quote.bid_px) * quote.bid_qty
+                    + static_cast<Wide>(quote.ask_px) * quote.ask_qty;
+
+                session_sum_ += numerator / static_cast<Wide>(added);
+                ++session_count_;
+            }
         }
 
         [[nodiscard]] std::optional<OrderStatus> decide(
@@ -78,6 +87,15 @@ namespace slipstream::server {
             }
 
             accepted_qty_ = static_cast<std::uint64_t>(candidate);
+
+            const Wide notional = static_cast<Wide>(trade.px) * trade.qty;
+
+            accepted_notional_ += notional;
+            signed_notional_ += buy ? notional : -notional;
+
+            if (buy) {
+                buy_qty_ += trade.qty;
+            }
             return OrderStatus::ACCEPTED;
         }
 
@@ -88,11 +106,45 @@ namespace slipstream::server {
         [[nodiscard]] std::uint64_t acceptedQty() const noexcept {
             return accepted_qty_;
         }
+
+        [[nodiscard]] std::optional<std::int64_t> averageAcceptedPrice() const noexcept {
+            if (accepted_qty_ == 0) {
+                return std::nullopt;
+            }
+
+            return static_cast<std::int64_t>(
+                accepted_notional_ / static_cast<Wide>(accepted_qty_)
+            );
+        }
+
+        [[nodiscard]] std::optional<std::int64_t> sessionVwap() const noexcept {
+            if (session_count_ == 0) {
+                return std::nullopt;
+            }
+
+            return static_cast<std::int64_t>(
+                session_sum_ / static_cast<Wide>(session_count_)
+            );
+        }
+
+        [[nodiscard]] Wide signedNotional() const noexcept {
+            return signed_notional_;
+        }
+
+        [[nodiscard]] std::uint64_t buyQty() const noexcept {
+            return buy_qty_;
+        }
     private:
         std::uint32_t max_quantity_;
         std::uint32_t band_;
         std::uint32_t cap_;
         std::uint64_t market_qty_{};
         std::uint64_t accepted_qty_{};
+
+        Wide session_sum_{};
+        std::uint64_t session_count_{};
+        Wide accepted_notional_{};
+        Wide signed_notional_{}; // BUY notional minus SELL notional.
+        std::uint64_t buy_qty_{};
     };
 }

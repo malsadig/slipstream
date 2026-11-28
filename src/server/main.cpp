@@ -7,6 +7,7 @@
 #include "slipstream/server/async_reporter.hpp"
 #include "slipstream/server/decision_engine.hpp"
 #include "slipstream/server/tcp_order_sink.hpp"
+#include "slipstream/server/execution_report.hpp"
 
 #include <cerrno>
 #include <stdexcept>
@@ -51,6 +52,12 @@ int main(int argc, char* argv[]) {
                 );
             }
 
+            DecisionEngine decisions{
+                    config->max_quantity,
+                    config->band_bps_x10000,
+                    config->participation_cap_x10000
+                };
+
             AsyncReporter reporter{config->report_capacity, std::cout};
             std::exception_ptr processing_error;
 
@@ -79,12 +86,6 @@ int main(int argc, char* argv[]) {
                 std::cerr << "OE accepted (fd=" << oeConnection.get()
                     << ")\n";
 
-                DecisionEngine decisions{
-                    config->max_quantity,
-                    config->band_bps_x10000,
-                    config->participation_cap_x10000
-                };
-
                 TcpOrderSink orders{oeConnection.get()};
 
                 L1Handler handler{
@@ -96,7 +97,8 @@ int main(int argc, char* argv[]) {
                     &orders
                 };
 
-                runTcpFeeds(mdConnection, oeConnection, handler, reporter.failureFd());
+                runTcpFeeds(mdConnection, oeConnection,
+                    handler, reporter.failureFd(), orders);
             } catch (...) {
                 processing_error = std::current_exception();
             }
@@ -110,6 +112,13 @@ int main(int argc, char* argv[]) {
             if (!output_ok) {
                 throw std::runtime_error("Report printer failed");
             }
+
+            printExecutionReport(
+                std::cout,
+                symbol,
+                decisions,
+                config->participation_cap_x10000
+            );
 
             std::cerr << "Feeds ended cleanly." << '\n';
             return EXIT_SUCCESS;
